@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/kommodity-io/talos-proxy
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- Address the proxy listens on
+listenAddress: ":50000"
+
+# -- Timeout for dialing upstream Talos API
+dialTimeout: "5s"
+
+# -- Comma-separated list of allowed CIDRs (empty = allow all)
+allowedCIDRs: ""
+
+# -- Log level (debug, info, warn, error)
+logLevel: "info"
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount
+  create: true
+  # -- Override the ServiceAccount name (defaults to release fullname)
+  name: ""
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi

@@ -1,0 +1,11 @@
+version: "2"
+
+linters:
+  default: all
+  disable:
+    - depguard
+    - wsl
+    - wsl_v5
+    - exhaustruct
+    - gomoddirectives
+    - ireturn
