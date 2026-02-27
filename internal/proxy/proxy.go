@@ -29,12 +29,13 @@ const (
 type Server struct {
 	dialTimeout  time.Duration
 	allowedCIDRs []*net.IPNet
+	allowedPorts []uint16
 	activeConns  atomic.Int64
 	logger       *zap.Logger
 }
 
 // NewServer creates a new proxy Server with the given options.
-func NewServer(dialTimeout time.Duration, allowedCIDRs []*net.IPNet, logger *zap.Logger) *Server {
+func NewServer(dialTimeout time.Duration, allowedCIDRs []*net.IPNet, allowedPorts []uint16, logger *zap.Logger) *Server {
 	if dialTimeout == 0 {
 		dialTimeout = defaultDialTimeout
 	}
@@ -46,6 +47,7 @@ func NewServer(dialTimeout time.Duration, allowedCIDRs []*net.IPNet, logger *zap
 	return &Server{
 		dialTimeout:  dialTimeout,
 		allowedCIDRs: allowedCIDRs,
+		allowedPorts: allowedPorts,
 		logger:       logger,
 	}
 }
@@ -162,6 +164,17 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 	err = ValidateCIDR(targetAddr, s.allowedCIDRs)
 	if err != nil {
 		s.logger.Warn("target address denied by CIDR policy",
+			zap.String("remote", remoteAddr),
+			zap.String("target", targetAddr),
+			zap.String("error", err.Error()),
+		)
+
+		return "", err
+	}
+
+	err = ValidatePort(targetAddr, s.allowedPorts)
+	if err != nil {
+		s.logger.Warn("target address denied by port policy",
 			zap.String("remote", remoteAddr),
 			zap.String("target", targetAddr),
 			zap.String("error", err.Error()),

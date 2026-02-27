@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -35,6 +36,7 @@ func run() error {
 	listenAddr := flag.String("listen-address", defaultListenAddress, "address to listen on (host:port)")
 	dialTimeout := flag.Duration("dial-timeout", defaultDialTimeout, "timeout for dialing target addresses")
 	allowedCIDRs := flag.String("allowed-cidrs", "", "comma-separated list of allowed target CIDRs (empty = allow all)")
+	allowedPorts := flag.String("allowed-ports", "", "comma-separated list of allowed target ports (empty = allow all)")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
 
 	flag.Parse()
@@ -58,7 +60,12 @@ func run() error {
 		return fmt.Errorf("parsing allowed CIDRs: %w", err)
 	}
 
-	server := proxy.NewServer(*dialTimeout, cidrs, logger)
+	ports, err := parsePorts(*allowedPorts)
+	if err != nil {
+		return fmt.Errorf("parsing allowed ports: %w", err)
+	}
+
+	server := proxy.NewServer(*dialTimeout, cidrs, ports, logger)
 
 	listenConfig := net.ListenConfig{}
 
@@ -74,6 +81,7 @@ func run() error {
 		zap.String("listen-address", *listenAddr),
 		zap.Duration("dial-timeout", *dialTimeout),
 		zap.String("allowed-cidrs", *allowedCIDRs),
+		zap.String("allowed-ports", *allowedPorts),
 	)
 
 	err = server.Serve(ctx, listener)
@@ -111,4 +119,31 @@ func parseCIDRs(raw string) ([]*net.IPNet, error) {
 	}
 
 	return cidrs, nil
+}
+
+// parsePorts parses a comma-separated list of port numbers into uint16 values.
+// Returns nil if the input is empty.
+func parsePorts(raw string) ([]uint16, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	ports := make([]uint16, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		port, err := strconv.ParseUint(part, 10, 16)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port %q: %w", part, err)
+		}
+
+		ports = append(ports, uint16(port)) //nolint:gosec // bounds checked by ParseUint with bitSize 16
+	}
+
+	return ports, nil
 }

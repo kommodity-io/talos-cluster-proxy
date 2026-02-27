@@ -11,4 +11,7 @@ var (
 
 	// ErrCIDRDenied is returned when the target IP is not within any of the allowed CIDRs.
 	ErrCIDRDenied = errors.New("target address not in allowed CIDRs")
+
+	// ErrPortDenied is returned when the target port is not in the allowed ports list.
+	ErrPortDenied = errors.New("target port not in allowed ports")
 )
