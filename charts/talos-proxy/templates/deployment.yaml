@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "talos-proxy.fullname" . }}
+  labels:
+    {{- include "talos-proxy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "talos-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "talos-proxy.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "talos-proxy.serviceAccountName" . }}
+      hostNetwork: false
+      containers:
+        - name: talos-proxy
+          image: {{ include "talos-proxy.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --listen-address={{ .Values.listenAddress }}
+            - --dial-timeout={{ .Values.dialTimeout }}
+            - --log-level={{ .Values.logLevel }}
+            {{- if .Values.allowedCIDRs }}
+            - --allowed-cidrs={{ .Values.allowedCIDRs }}
+            {{- end }}
+          ports:
+            - containerPort: 50000
+              name: proxy
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 50000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 50000
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
