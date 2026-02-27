@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -79,7 +80,7 @@ func startProxy(t *testing.T, allowedCIDRs []*net.IPNet) (net.Listener, *proxy.S
 		t.Fatalf("failed to start proxy listener: %v", err)
 	}
 
-	server := proxy.NewServer(5*time.Second, allowedCIDRs, nil)
+	server := proxy.NewServer(5*time.Second, allowedCIDRs, nil, nil)
 
 	t.Cleanup(func() {
 		_ = listener.Close()
@@ -357,7 +358,7 @@ func TestDialTimeout(t *testing.T) {
 	}
 	defer func() { _ = listener.Close() }()
 
-	server := proxy.NewServer(100*time.Millisecond, nil, nil)
+	server := proxy.NewServer(100*time.Millisecond, nil, nil, nil)
 
 	go func() { _ = server.Serve(t.Context(), listener) }()
 
@@ -541,6 +542,144 @@ func TestValidateCIDR(t *testing.T) {
 			t.Fatalf("expected no error with nil CIDRs, got %v", err)
 		}
 	})
+}
+
+func TestPortAllowed(t *testing.T) {
+	t.Parallel()
+
+	echo := startEchoServer(t)
+	defer func() { _ = echo.Close() }()
+
+	// Parse the echo server port and allow only that port.
+	_, portStr, _ := net.SplitHostPort(echo.Addr().String())
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test helper
+	if err != nil {
+		t.Fatalf("failed to start proxy listener: %v", err)
+	}
+
+	port := parseTestPort(t, portStr)
+	server := proxy.NewServer(5*time.Second, nil, []uint16{port}, nil)
+
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	go func() { _ = server.Serve(t.Context(), listener) }()
+
+	conn := dialProxy(t, listener.Addr().String(), echo.Addr().String())
+	defer func() { _ = conn.Close() }()
+
+	payload := []byte("port allowed")
+
+	_, err = conn.Write(payload)
+	if err != nil {
+		t.Fatalf("failed to write payload: %v", err)
+	}
+
+	buf := make([]byte, len(payload))
+
+	_, err = io.ReadFull(conn, buf)
+	if err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	if !bytes.Equal(buf, payload) {
+		t.Fatalf("expected %q, got %q", payload, buf)
+	}
+}
+
+func TestPortDenied(t *testing.T) {
+	t.Parallel()
+
+	echo := startEchoServer(t)
+	defer func() { _ = echo.Close() }()
+
+	// Allow only port 1 — the echo server will be on a different port.
+	listener, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test helper
+	if err != nil {
+		t.Fatalf("failed to start proxy listener: %v", err)
+	}
+
+	server := proxy.NewServer(5*time.Second, nil, []uint16{1}, nil)
+
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	go func() { _ = server.Serve(t.Context(), listener) }()
+
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+
+	conn, err := dialer.DialContext(t.Context(), "tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	err = proxy.WriteTargetAddress(conn, echo.Addr().String())
+	if err != nil {
+		t.Fatalf("failed to write target address: %v", err)
+	}
+
+	// The proxy should close the connection.
+	buf := make([]byte, 1)
+
+	err = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err != nil {
+		t.Fatalf("failed to set read deadline: %v", err)
+	}
+
+	_, err = conn.Read(buf)
+	if err == nil {
+		t.Fatal("expected error reading from proxy when port is denied")
+	}
+}
+
+func TestValidatePort(t *testing.T) {
+	t.Parallel()
+
+	ports := []uint16{50000, 443}
+
+	t.Run("allowed", func(t *testing.T) {
+		t.Parallel()
+
+		err := proxy.ValidatePort("10.200.0.5:50000", ports)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("denied", func(t *testing.T) {
+		t.Parallel()
+
+		err := proxy.ValidatePort("10.200.0.5:8080", ports)
+		if !errors.Is(err, proxy.ErrPortDenied) {
+			t.Fatalf("expected ErrPortDenied, got %v", err)
+		}
+	})
+
+	t.Run("nil ports allows all", func(t *testing.T) {
+		t.Parallel()
+
+		err := proxy.ValidatePort("10.200.0.5:8080", nil)
+		if err != nil {
+			t.Fatalf("expected no error with nil ports, got %v", err)
+		}
+	})
+}
+
+func parseTestPort(t *testing.T, portStr string) uint16 {
+	t.Helper()
+
+	var port uint16
+
+	_, err := fmt.Sscanf(portStr, "%d", &port)
+	if err != nil {
+		t.Fatalf("failed to parse port %q: %v", portStr, err)
+	}
+
+	return port
 }
 
 func TestActiveConnections(t *testing.T) {

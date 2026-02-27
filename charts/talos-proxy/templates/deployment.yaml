@@ -27,6 +27,9 @@ spec:
             {{- if .Values.allowedCIDRs }}
             - --allowed-cidrs={{ .Values.allowedCIDRs }}
             {{- end }}
+            {{- if .Values.allowedPorts }}
+            - --allowed-ports={{ .Values.allowedPorts }}
+            {{- end }}
           ports:
             - containerPort: 50000
               name: proxy
