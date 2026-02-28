@@ -1,6 +1,6 @@
 # talos-proxy
 
-A lightweight TCP proxy for [Talos Linux](https://www.talos.dev/) clusters. It accepts incoming connections, reads a target address from a binary header, and performs bidirectional byte forwarding to the target. Designed to run on control-plane nodes to proxy Talos API traffic into the cluster.
+A lightweight TCP proxy for [Talos Linux](https://www.talos.dev/) clusters. It accepts incoming connections, reads a target address from a binary header, and performs bidirectional byte forwarding to the target. Designed to proxy Talos API traffic into the cluster.
 
 ## Protocol
 
@@ -24,7 +24,7 @@ talos-proxy [flags]
 | `-listen-address`  | `:50000`   | Address to listen on (`host:port`)                              |
 | `-dial-timeout`    | `5s`       | Timeout for dialing target addresses                            |
 | `-allowed-cidrs`   | _(empty)_  | Comma-separated list of allowed target CIDRs (empty = allow all)|
-| `-allowed-ports`   | _(empty)_  | Comma-separated list of allowed target ports (empty = allow all) |
+| `-allowed-ports`   | _(empty)_  | Comma-separated list of allowed target ports (empty = allow all)|
 | `-log-level`       | `info`     | Log level (`debug`, `info`, `warn`, `error`)                    |
 
 ### Examples
@@ -85,8 +85,6 @@ Key values:
 | `logLevel`         | `"info"`                             | Log level                            |
 | `image.repository` | `ghcr.io/kommodity-io/talos-proxy`   | Container image repository           |
 | `image.tag`        | Chart `appVersion`                   | Container image tag                  |
-
-By default the chart schedules pods on control-plane nodes with the appropriate tolerations.
 
 ## Testing with talosctl
 
