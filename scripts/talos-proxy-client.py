@@ -89,7 +89,7 @@ def main():
 
     print(f"Listening on {args.listen}")
     print(f"Forwarding via {args.proxy} -> {args.target}")
-    print(f"\nUse: talosctl --endpoints {listen_host} --talosconfig <path> health")
+    print(f"\nUse: talosctl --endpoints {listen_host} --talosconfig <path> --nodes <node_IP> version")
 
     try:
         while True:
