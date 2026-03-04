@@ -52,25 +52,29 @@ def handle_client(client_sock, proxy_host, proxy_port, target):
 
     try:
         proxy_sock.connect((proxy_host, proxy_port))
+
+        header = struct.pack(">I", len(target)) + target.encode()
+        proxy_sock.sendall(header)
+        proxy_sock.settimeout(None)
+
+        t1 = threading.Thread(target=forward, args=(client_sock, proxy_sock), daemon=True)
+        t2 = threading.Thread(target=forward, args=(proxy_sock, client_sock), daemon=True)
+
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
     except OSError as e:
-        print(f"  Failed to connect to proxy: {e}")
-        client_sock.close()
-        return
-
-    header = struct.pack(">I", len(target)) + target.encode()
-    proxy_sock.sendall(header)
-    proxy_sock.settimeout(None)
-
-    t1 = threading.Thread(target=forward, args=(client_sock, proxy_sock), daemon=True)
-    t2 = threading.Thread(target=forward, args=(proxy_sock, client_sock), daemon=True)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-
-    client_sock.close()
-    proxy_sock.close()
-
+        print(f"  Proxy error: {e}")
+    finally:
+        try:
+            client_sock.close()
+        except OSError:
+            pass
+        try:
+            proxy_sock.close()
+        except OSError:
+            pass
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -89,7 +93,7 @@ def main():
 
     print(f"Listening on {args.listen}")
     print(f"Forwarding via {args.proxy} -> {args.target}")
-    print(f"\nUse: talosctl --endpoints {listen_host} --talosconfig <path> --nodes <node_IP> version")
+    print(f"\nUse: talosctl --talosconfig <path> --endpoints {listen_host}:50001 --nodes {listen_host} version")
 
     try:
         while True:
