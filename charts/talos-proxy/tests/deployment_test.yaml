@@ -106,7 +106,13 @@ tests:
           path: spec.template.spec.containers[0].args
           content: "--dial-timeout=10s"
 
-  - it: should set default nodeSelector and tolerations
+  - it: should set nodeSelector and tolerations when configured
+    set:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
     asserts:
       - equal:
           path: spec.template.spec.nodeSelector["node-role.kubernetes.io/control-plane"]
