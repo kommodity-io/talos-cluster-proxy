@@ -1,9 +1,6 @@
 BINARY_NAME := talos-proxy
 IMAGE_NAME := ghcr.io/kommodity-io/talos-proxy
 VERSION			?= $(shell git describe --tags --always)
-TREE_STATE      ?= $(shell git describe --always --dirty --exclude='*' | grep -q dirty && echo dirty || echo clean)
-COMMIT			?= $(shell git rev-parse HEAD)
-BUILD_DATE		?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 SOURCES			:= $(shell find . -name '*.go')
 LINTER := bin/golangci-lint
 
