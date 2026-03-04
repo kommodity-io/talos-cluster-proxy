@@ -27,9 +27,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
-      - equal:
-          path: spec.template.spec.serviceAccountName
-          value: test-release-talos-proxy
 
   - it: should use custom image tag when set
     set:

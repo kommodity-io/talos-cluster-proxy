@@ -21,15 +21,21 @@ allowedPorts: "50000"
 # -- Log level (debug, info, warn, error)
 logLevel: "info"
 
-serviceAccount:
-  # -- Whether to create a ServiceAccount
-  create: true
-  # -- Override the ServiceAccount name (defaults to release fullname)
-  name: ""
-
 resources:
   requests:
     cpu: 10m
     memory: 16Mi
   limits:
     memory: 64Mi
+
+# -- Node selector for pod scheduling
+# Example:
+#   node-role.kubernetes.io/control-plane: ""
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+# Example:
+#   - key: node-role.kubernetes.io/control-plane
+#     operator: Exists
+#     effect: NoSchedule
+tolerations: []

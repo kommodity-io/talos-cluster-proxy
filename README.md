@@ -90,15 +90,21 @@ Key values:
 
 Since `talosctl` uses mTLS and verifies the server certificate against the endpoint address, you need to bind a loopback alias matching the target node IP. A helper script (`scripts/talos-proxy-client.py`) injects the binary header so that `talosctl` can communicate through the proxy.
 
-```
-┌───────────┐       ┌────────────────────┐         ┌─────────────────────┐       ┌────────────┐
-│ talosctl  │──────▶│ talos-proxy-client │────────▶│ talos-proxy (pod)   │──────▶│ Talos node │
-│           │ gRPC  │ (local script)     │ binary  │ (in-cluster)        │  TCP  │ API :50000 │
-│           │       │ adds header,       │ header  │ reads header,       │       │            │
-│           │◀──────│ forwards traffic   │◀─────── │ dials target,       │◀──────│            │
-│           │       │                    │ + data  │ bidirectional copy  │       │            │
-└───────────┘       └────────────────────┘         └─────────────────────┘       └────────────┘
-   local              local (loopback)              kubectl port-forward          cluster node
+```mermaid
+sequenceDiagram
+      participant talosctl
+      participant client as talos-proxy-client<br/>(local script)
+      participant proxy as talos-proxy (pod)<br/>(in-cluster)
+      participant node as Talos node<br/>API :50000
+
+      talosctl->>client: gRPC
+      client->>proxy: binary header
+      Note over client: adds header,<br/>forwards traffic
+      proxy->>node: TCP
+      Note over proxy: reads header,<br/>dials target,<br/>bidirectional copy
+      node-->>proxy:
+      proxy-->>client: + data
+      client-->>talosctl:
 ```
 
 ```sh
