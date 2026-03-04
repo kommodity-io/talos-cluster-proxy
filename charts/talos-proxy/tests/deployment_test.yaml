@@ -85,23 +85,23 @@ tests:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
 
-  - it: should set default listen-address and dial-timeout args
+  - it: should set default listen-port and dial-timeout args
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--listen-address=:50000"
+          content: "--listen-port=50000"
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--dial-timeout=5s"
 
-  - it: should use custom listen address and dial timeout
+  - it: should use custom listen port and dial timeout
     set:
-      listenAddress: ":60000"
+      listenPort: 60000
       dialTimeout: "10s"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
-          content: "--listen-address=:60000"
+          content: "--listen-port=60000"
       - contains:
           path: spec.template.spec.containers[0].args
           content: "--dial-timeout=10s"

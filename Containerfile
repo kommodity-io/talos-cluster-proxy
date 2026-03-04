@@ -1,10 +1,19 @@
-FROM golang:1.24-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+RUN apk add --no-cache make git
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION
+
 WORKDIR /app
-COPY go.mod go.sum* ./
-RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /talos-proxy ./cmd/talos-proxy
+RUN go env -w GOCACHE=/go-cache
+RUN go env -w GOMODCACHE=/gomod-cache
+
+RUN go mod download
+
+RUN --mount=type=cache,target=/gomod-cache --mount=type=cache,target=/go-cache \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} VERSION=${VERSION} make build
 
 FROM scratch
-COPY --from=build /talos-proxy /talos-proxy
+COPY --from=build /app/bin/talos-proxy /talos-proxy
 ENTRYPOINT ["/talos-proxy"]

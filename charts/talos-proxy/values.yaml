@@ -6,8 +6,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-# -- Address the proxy listens on
-listenAddress: ":50000"
+# -- Port the proxy listens on
+listenPort: 50000
 
 # -- Timeout for dialing upstream Talos API
 dialTimeout: "5s"

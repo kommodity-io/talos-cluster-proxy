@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	defaultListenAddress = ":50000"
-	defaultDialTimeout   = 5 * time.Second
+	defaultListenPort  = 50000
+	defaultDialTimeout = 5 * time.Second
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 }
 
 func run() error {
-	listenAddr := flag.String("listen-address", defaultListenAddress, "address to listen on (host:port)")
+	listenPort := flag.Int("listen-port", defaultListenPort, "port to listen on")
 	dialTimeout := flag.Duration("dial-timeout", defaultDialTimeout, "timeout for dialing target addresses")
 	allowedCIDRs := flag.String("allowed-cidrs", "", "comma-separated list of allowed target CIDRs (empty = allow all)")
 	allowedPorts := flag.String("allowed-ports", "", "comma-separated list of allowed target ports (empty = allow all)")
@@ -72,13 +72,15 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	listener, err := listenConfig.Listen(ctx, "tcp", *listenAddr)
+	listenAddr := fmt.Sprintf(":%d", *listenPort)
+
+	listener, err := listenConfig.Listen(ctx, "tcp", listenAddr)
 	if err != nil {
-		return fmt.Errorf("creating listener on %s: %w", *listenAddr, err)
+		return fmt.Errorf("creating listener on %s: %w", listenAddr, err)
 	}
 
 	logger.Info("talos-proxy starting",
-		zap.String("listen-address", *listenAddr),
+		zap.String("listen-address", listenAddr),
 		zap.Duration("dial-timeout", *dialTimeout),
 		zap.String("allowed-cidrs", *allowedCIDRs),
 		zap.String("allowed-ports", *allowedPorts),

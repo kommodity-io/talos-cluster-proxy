@@ -20,7 +20,7 @@ spec:
           image: {{ include "talos-proxy.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --listen-address={{ .Values.listenAddress }}
+            - --listen-port={{ .Values.listenPort }}
             - --dial-timeout={{ .Values.dialTimeout }}
             - --log-level={{ .Values.logLevel }}
             {{- if .Values.allowedCIDRs }}
@@ -30,17 +30,17 @@ spec:
             - --allowed-ports={{ .Values.allowedPorts }}
             {{- end }}
           ports:
-            - containerPort: 50000
+            - containerPort: {{ .Values.listenPort }}
               name: proxy
               protocol: TCP
           livenessProbe:
             tcpSocket:
-              port: 50000
+              port: {{ .Values.listenPort }}
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             tcpSocket:
-              port: 50000
+              port: {{ .Values.listenPort }}
             periodSeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
