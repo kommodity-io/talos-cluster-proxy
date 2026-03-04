@@ -93,8 +93,7 @@ def main():
 
     print(f"Listening on {args.listen}")
     print(f"Forwarding via {args.proxy} -> {args.target}")
-    print(f"\nUse: talosctl --talosconfig <path> --endpoints {listen_host}:50001 --nodes {listen_host} version")
-
+    print(f"\nUse: talosctl --talosconfig <path> --endpoints {listen_host}:{listen_port} --nodes {listen_host} version")
     try:
         while True:
             client_sock, addr = server.accept()
