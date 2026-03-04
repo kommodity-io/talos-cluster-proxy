@@ -9,7 +9,7 @@ COPY . .
 RUN go env -w GOCACHE=/go-cache
 RUN go env -w GOMODCACHE=/gomod-cache
 
-RUN go mod download
+RUN --mount=type=cache,target=/gomod-cache go mod download
 
 RUN --mount=type=cache,target=/gomod-cache --mount=type=cache,target=/go-cache \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} VERSION=${VERSION} make build

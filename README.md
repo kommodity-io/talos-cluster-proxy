@@ -63,7 +63,7 @@ A minimal `scratch`-based container image is published to `ghcr.io/kommodity-io/
 Build locally:
 
 ```sh
-make image VERSION=dev
+make build-image VERSION=dev
 ```
 
 ## Helm Chart
