@@ -113,7 +113,7 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 		s.logger.Warn("failed to dial target",
 			zap.String("remote", remoteAddr),
 			zap.String("target", targetAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 
 		return
@@ -135,7 +135,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 	if err != nil {
 		s.logger.Error("failed to set read deadline",
 			zap.String("remote", remoteAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 
 		return "", fmt.Errorf("setting header read deadline: %w", err)
@@ -146,7 +146,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 		if !errors.Is(err, io.EOF) {
 			s.logger.Warn("failed to read target address",
 				zap.String("remote", remoteAddr),
-				zap.String("error", err.Error()),
+				zap.Error(err),
 			)
 		}
 
@@ -157,7 +157,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 	if err != nil {
 		s.logger.Error("failed to clear read deadline",
 			zap.String("remote", remoteAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 
 		return "", fmt.Errorf("clearing header read deadline: %w", err)
@@ -168,7 +168,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 		s.logger.Warn("target address denied by CIDR policy",
 			zap.String("remote", remoteAddr),
 			zap.String("target", targetAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 
 		return "", err
@@ -179,7 +179,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 		s.logger.Warn("target address denied by port policy",
 			zap.String("remote", remoteAddr),
 			zap.String("target", targetAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 
 		return "", err
@@ -235,7 +235,7 @@ func (s *Server) copyAndCloseWrite(
 		s.logger.Debug(direction+" copy ended",
 			zap.String("remote", remoteAddr),
 			zap.String("target", targetAddr),
-			zap.String("error", err.Error()),
+			zap.Error(err),
 		)
 	}
 }

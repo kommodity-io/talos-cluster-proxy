@@ -4,7 +4,6 @@ VERSION			?= $(shell git describe --tags --always)
 TREE_STATE      ?= $(shell git describe --always --dirty --exclude='*' | grep -q dirty && echo dirty || echo clean)
 COMMIT			?= $(shell git rev-parse HEAD)
 BUILD_DATE		?= $(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
-GO_FLAGS		?=
 SOURCES			:= $(shell find . -name '*.go')
 LINTER := bin/golangci-lint
 
@@ -18,7 +17,7 @@ $(LINTER):
 build: bin/talos-proxy
 
 bin/talos-proxy: $(SOURCES)
-	go build $(GO_FLAGS) -o bin/$(BINARY_NAME) ./cmd/talos-proxy
+	go build -o bin/$(BINARY_NAME) ./cmd/talos-proxy
 
 test:
 	go test -v -race ./...
