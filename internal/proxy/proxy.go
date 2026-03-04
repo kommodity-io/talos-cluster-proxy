@@ -35,7 +35,9 @@ type Server struct {
 }
 
 // NewServer creates a new proxy Server with the given options.
-func NewServer(dialTimeout time.Duration, allowedCIDRs []*net.IPNet, allowedPorts []uint16, logger *zap.Logger) *Server {
+func NewServer(
+	dialTimeout time.Duration, allowedCIDRs []*net.IPNet, allowedPorts []uint16, logger *zap.Logger,
+) *Server {
 	if dialTimeout == 0 {
 		dialTimeout = defaultDialTimeout
 	}

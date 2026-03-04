@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 )
 
@@ -23,10 +24,8 @@ func ValidatePort(addr string, allowedPorts []uint16) error {
 		return fmt.Errorf("%w: invalid port %s", ErrInvalidAddress, portStr)
 	}
 
-	for _, allowed := range allowedPorts {
-		if uint16(port) == allowed {
-			return nil
-		}
+	if slices.Contains(allowedPorts, uint16(port)) {
+		return nil
 	}
 
 	return fmt.Errorf("%w: %s", ErrPortDenied, addr)

@@ -53,7 +53,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("creating logger: %w", err)
 	}
-	defer logger.Sync()
+	defer logger.Sync() //nolint:errcheck // best-effort flush
 
 	cidrs, err := parseCIDRs(*allowedCIDRs)
 	if err != nil {
@@ -142,7 +142,7 @@ func parsePorts(raw string) ([]uint16, error) {
 			return nil, fmt.Errorf("invalid port %q: %w", part, err)
 		}
 
-		ports = append(ports, uint16(port)) //nolint:gosec // bounds checked by ParseUint with bitSize 16
+		ports = append(ports, uint16(port))
 	}
 
 	return ports, nil
