@@ -16,6 +16,9 @@ import (
 	"github.com/kommodity-io/talos-proxy/internal/proxy"
 )
 
+// version is set at build time via -ldflags.
+var version = "dev"
+
 const (
 	defaultListenPort  = 50000
 	defaultDialTimeout = 5 * time.Second
@@ -70,6 +73,7 @@ func run() error {
 	}
 
 	logger.Info("talos-proxy starting",
+		zap.String("version", version),
 		zap.String("listen-address", listenAddr),
 		zap.Duration("dial-timeout", *dialTimeout),
 		zap.String("allowed-cidrs", *allowedCIDRs),

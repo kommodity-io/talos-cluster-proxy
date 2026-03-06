@@ -14,7 +14,7 @@ $(LINTER):
 build: bin/talos-proxy
 
 bin/talos-proxy: $(SOURCES)
-	go build -o bin/$(BINARY_NAME) ./cmd/talos-proxy
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/talos-proxy
 
 test:
 	go test -v -race ./...
