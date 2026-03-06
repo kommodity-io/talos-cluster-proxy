@@ -16,7 +16,7 @@ dialTimeout: "5s"
 allowedCIDRs: ""
 
 # -- Comma-separated list of allowed target ports (empty = allow all)
-allowedPorts: "50000"
+allowedPorts: ""
 
 # -- Log level (debug, info, warn, error)
 logLevel: "info"
