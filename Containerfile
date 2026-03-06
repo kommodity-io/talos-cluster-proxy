@@ -1,5 +1,5 @@
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
-RUN apk add --no-cache make git
+RUN apk add --no-cache make
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
