@@ -31,7 +31,7 @@ func startEchoServer(t *testing.T) net.Listener {
 			}
 
 			go func(conn net.Conn) {
-				defer conn.Close() //nolint:errcheck // test helper
+				defer func() { _ = conn.Close() }()
 				_, _ = io.Copy(conn, conn)
 			}(conn)
 		}
@@ -58,7 +58,7 @@ func startHalfCloseServer(t *testing.T, response []byte) net.Listener {
 			}
 
 			go func(conn net.Conn) {
-				defer conn.Close() //nolint:errcheck // test helper
+				defer func() { _ = conn.Close() }()
 
 				// Read until the client signals EOF.
 				_, _ = io.ReadAll(conn)

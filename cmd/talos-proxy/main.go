@@ -39,19 +39,11 @@ func run() error {
 
 	flag.Parse()
 
-	level, err := zap.ParseAtomicLevel(*logLevel)
+	logger, err := buildLogger(*logLevel)
 	if err != nil {
-		return fmt.Errorf("parsing log level: %w", err)
+		return err
 	}
-
-	cfg := zap.NewProductionConfig()
-	cfg.Level = level
-
-	logger, err := cfg.Build()
-	if err != nil {
-		return fmt.Errorf("creating logger: %w", err)
-	}
-	defer logger.Sync() //nolint:errcheck // best-effort flush
+	defer func() { _ = logger.Sync() }()
 
 	cidrs, err := proxy.ParseCIDRs(*allowedCIDRs)
 	if err != nil {
@@ -92,4 +84,21 @@ func run() error {
 	logger.Info("talos-proxy stopped")
 
 	return nil
+}
+
+func buildLogger(logLevel string) (*zap.Logger, error) {
+	level, err := zap.ParseAtomicLevel(logLevel)
+	if err != nil {
+		return nil, fmt.Errorf("parsing log level: %w", err)
+	}
+
+	cfg := zap.NewProductionConfig()
+	cfg.Level = level
+
+	logger, err := cfg.Build()
+	if err != nil {
+		return nil, fmt.Errorf("creating logger: %w", err)
+	}
+
+	return logger, nil
 }
