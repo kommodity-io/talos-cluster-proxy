@@ -8,8 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -55,12 +53,12 @@ func run() error {
 	}
 	defer logger.Sync() //nolint:errcheck // best-effort flush
 
-	cidrs, err := parseCIDRs(*allowedCIDRs)
+	cidrs, err := proxy.ParseCIDRs(*allowedCIDRs)
 	if err != nil {
 		return fmt.Errorf("parsing allowed CIDRs: %w", err)
 	}
 
-	ports, err := parsePorts(*allowedPorts)
+	ports, err := proxy.ParsePorts(*allowedPorts)
 	if err != nil {
 		return fmt.Errorf("parsing allowed ports: %w", err)
 	}
@@ -94,58 +92,4 @@ func run() error {
 	logger.Info("talos-proxy stopped")
 
 	return nil
-}
-
-// parseCIDRs parses a comma-separated list of CIDR strings into net.IPNet values.
-// Returns nil if the input is empty.
-func parseCIDRs(raw string) ([]*net.IPNet, error) {
-	if raw == "" {
-		return nil, nil
-	}
-
-	parts := strings.Split(raw, ",")
-	cidrs := make([]*net.IPNet, 0, len(parts))
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		_, cidr, err := net.ParseCIDR(part)
-		if err != nil {
-			return nil, fmt.Errorf("invalid CIDR %q: %w", part, err)
-		}
-
-		cidrs = append(cidrs, cidr)
-	}
-
-	return cidrs, nil
-}
-
-// parsePorts parses a comma-separated list of port numbers into uint16 values.
-// Returns nil if the input is empty.
-func parsePorts(raw string) ([]uint16, error) {
-	if raw == "" {
-		return nil, nil
-	}
-
-	parts := strings.Split(raw, ",")
-	ports := make([]uint16, 0, len(parts))
-
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		port, err := strconv.ParseUint(part, 10, 16)
-		if err != nil {
-			return nil, fmt.Errorf("invalid port %q: %w", part, err)
-		}
-
-		ports = append(ports, uint16(port))
-	}
-
-	return ports, nil
 }

@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 // ValidateCIDR checks whether the target address is within one of the allowed CIDRs.
@@ -29,4 +30,31 @@ func ValidateCIDR(addr string, allowedCIDRs []*net.IPNet) error {
 	}
 
 	return fmt.Errorf("%w: %s", ErrCIDRDenied, addr)
+}
+
+// ParseCIDRs parses a comma-separated list of CIDR strings into net.IPNet values.
+// Returns nil if the input is empty.
+func ParseCIDRs(raw string) ([]*net.IPNet, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	cidrs := make([]*net.IPNet, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		_, cidr, err := net.ParseCIDR(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CIDR %q: %w", part, err)
+		}
+
+		cidrs = append(cidrs, cidr)
+	}
+
+	return cidrs, nil
 }
