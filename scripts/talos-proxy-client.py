@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Local TCP proxy that injects the talos-proxy binary header.
+"""Local TCP proxy that injects the talos-cluster-proxy binary header.
 
-Listens locally and forwards connections through talos-proxy to a target
-Talos node, prepending the binary header that talos-proxy expects.
+Listens locally and forwards connections through talos-cluster-proxy to a target
+Talos node, prepending the binary header that talos-cluster-proxy expects.
 
 The Talos API uses mTLS and the server certificate is issued for the node's
 real IP. To make talosctl's TLS verification pass, listen on the target IP
@@ -12,8 +12,8 @@ by adding a loopback alias first:
     sudo ip addr add 10.200.0.8/32 dev lo       # Linux
 
 Usage:
-    # With port-forward running: kubectl port-forward deploy/talos-proxy 50000
-    python3 scripts/talos-proxy-client.py --listen 10.200.0.8:50001 --target 10.200.0.8:50000
+    # With port-forward running: kubectl port-forward deploy/talos-cluster-proxy 50000
+    python3 scripts/talos-cluster-proxy-client.py --listen 10.200.0.8:50001 --target 10.200.0.8:50000
 
     # Then use talosctl against the target IP:
     talosctl --talosconfig talosconfig.yaml --endpoints 10.200.0.8:50001 --nodes 10.200.0.8 version
@@ -79,7 +79,7 @@ def handle_client(client_sock, proxy_host, proxy_port, target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--listen", default="127.0.0.1:50001", help="local listen address (default: 127.0.0.1:50001)")
-    parser.add_argument("--proxy", default="127.0.0.1:50000", help="talos-proxy address (default: 127.0.0.1:50000)")
+    parser.add_argument("--proxy", default="127.0.0.1:50000", help="talos-cluster-proxy address (default: 127.0.0.1:50000)")
     parser.add_argument("--target", required=True, help="target Talos node address (e.g. 10.200.0.8:50000)")
     args = parser.parse_args()
 

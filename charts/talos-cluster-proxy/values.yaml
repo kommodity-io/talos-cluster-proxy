@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/kommodity-io/talos-proxy
+  repository: ghcr.io/kommodity-io/talos-cluster-proxy
   # -- Overrides the image tag whose default is the chart appVersion
   tag: ""
   pullPolicy: IfNotPresent

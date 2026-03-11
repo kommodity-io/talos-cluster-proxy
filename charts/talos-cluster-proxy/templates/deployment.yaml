@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "talos-proxy.fullname" . }}
+  name: {{ include "talos-cluster-proxy.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "talos-proxy.labels" . | nindent 4 }}
+    {{- include "talos-cluster-proxy.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "talos-proxy.selectorLabels" . | nindent 6 }}
+      {{- include "talos-cluster-proxy.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "talos-proxy.selectorLabels" . | nindent 8 }}
+        {{- include "talos-cluster-proxy.selectorLabels" . | nindent 8 }}
     spec:
       hostNetwork: false
       containers:
-        - name: talos-proxy
-          image: {{ include "talos-proxy.image" . }}
+        - name: talos-cluster-proxy
+          image: {{ include "talos-cluster-proxy.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --listen-port={{ .Values.listenPort }}

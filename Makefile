@@ -1,5 +1,5 @@
-BINARY_NAME := talos-proxy
-IMAGE_NAME := ghcr.io/kommodity-io/talos-proxy
+BINARY_NAME := talos-cluster-proxy
+IMAGE_NAME := ghcr.io/kommodity-io/talos-cluster-proxy
 VERSION			?= $(shell git describe --tags --always)
 SOURCES			:= $(shell find . -name '*.go')
 LINTER := bin/golangci-lint
@@ -11,10 +11,10 @@ golangci-lint: $(LINTER) ## Download golangci-lint locally if necessary.
 $(LINTER):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b bin/ v2.9.0
 
-build: bin/talos-proxy
+build: bin/talos-cluster-proxy
 
-bin/talos-proxy: $(SOURCES)
-	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/talos-proxy
+bin/talos-cluster-proxy: $(SOURCES)
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/talos-cluster-proxy
 
 test:
 	go test -v -race ./...

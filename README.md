@@ -1,4 +1,4 @@
-# talos-proxy
+# talos-cluster-proxy
 
 A lightweight TCP proxy for [Talos Linux](https://www.talos.dev/) clusters. It accepts incoming connections, reads a target address from a binary header, and performs bidirectional byte forwarding to the target. Designed to proxy Talos API traffic into the cluster.
 
@@ -16,7 +16,7 @@ After the header is read, the proxy dials the target and copies bytes in both di
 ## Usage
 
 ```sh
-talos-proxy [flags]
+talos-cluster-proxy [flags]
 ```
 
 | Flag             | Default   | Description                                                      |
@@ -31,19 +31,19 @@ talos-proxy [flags]
 
 ```sh
 # Listen on the default port, allow all targets
-talos-proxy
+talos-cluster-proxy
 
 # Restrict targets to a specific subnet
-talos-proxy -allowed-cidrs 10.200.0.0/16
+talos-cluster-proxy -allowed-cidrs 10.200.0.0/16
 
 # Multiple allowed CIDRs
-talos-proxy -allowed-cidrs "10.200.0.0/16,172.20.0.0/16"
+talos-cluster-proxy -allowed-cidrs "10.200.0.0/16,172.20.0.0/16"
 
 # Restrict to specific ports
-talos-proxy -allowed-ports "50000,443"
+talos-cluster-proxy -allowed-ports "50000,443"
 
 # Combine CIDR and port restrictions
-talos-proxy -allowed-cidrs 10.200.0.0/16 -allowed-ports 50000
+talos-cluster-proxy -allowed-cidrs 10.200.0.0/16 -allowed-ports 50000
 ```
 
 ## Building
@@ -51,14 +51,14 @@ talos-proxy -allowed-cidrs 10.200.0.0/16 -allowed-ports 50000
 Requires Go 1.24+.
 
 ```sh
-make build       # binary output to bin/talos-proxy
+make build       # binary output to bin/talos-cluster-proxy
 make test        # run tests with race detector
 make lint        # run golangci-lint
 ```
 
 ## Container Image
 
-A minimal `scratch`-based container image is published to `ghcr.io/kommodity-io/talos-proxy`.
+A minimal `scratch`-based container image is published to `ghcr.io/kommodity-io/talos-cluster-proxy`.
 
 Build locally:
 
@@ -68,33 +68,33 @@ make build-image
 
 ## Helm Chart
 
-A Helm chart is included under `charts/talos-proxy/` for deploying into Kubernetes clusters.
+A Helm chart is included under `charts/talos-cluster-proxy/` for deploying into Kubernetes clusters.
 
 ```sh
-helm install talos-proxy charts/talos-proxy
+helm install talos-cluster-proxy charts/talos-cluster-proxy
 ```
 
 Key values:
 
-| Value              | Default                            | Description                          |
-| ------------------ | ---------------------------------- | ------------------------------------ |
-| `listenPort`       | `50000`                            | Proxy listen port                    |
-| `dialTimeout`      | `5s`                               | Upstream dial timeout                |
-| `allowedCIDRs`     | `""`                               | Comma-separated allowed target CIDRs |
-| `allowedPorts`     | `"50000"`                          | Comma-separated allowed target ports |
-| `logLevel`         | `"info"`                           | Log level                            |
-| `image.repository` | `ghcr.io/kommodity-io/talos-proxy` | Container image repository           |
-| `image.tag`        | Chart `appVersion`                 | Container image tag                  |
+| Value              | Default                                    | Description                          |
+| ------------------ | ------------------------------------------ | ------------------------------------ |
+| `listenPort`       | `50000`                                    | Proxy listen port                    |
+| `dialTimeout`      | `5s`                                       | Upstream dial timeout                |
+| `allowedCIDRs`     | `""`                                       | Comma-separated allowed target CIDRs |
+| `allowedPorts`     | `"50000"`                                  | Comma-separated allowed target ports |
+| `logLevel`         | `"info"`                                   | Log level                            |
+| `image.repository` | `ghcr.io/kommodity-io/talos-cluster-proxy` | Container image repository           |
+| `image.tag`        | Chart `appVersion`                         | Container image tag                  |
 
 ## Testing with talosctl
 
-Since `talosctl` uses mTLS and verifies the server certificate against the endpoint address, you need to bind a loopback alias matching the target node IP. A helper script (`scripts/talos-proxy-client.py`) injects the binary header so that `talosctl` can communicate through the proxy.
+Since `talosctl` uses mTLS and verifies the server certificate against the endpoint address, you need to bind a loopback alias matching the target node IP. A helper script (`scripts/talos-cluster-proxy-client.py`) injects the binary header so that `talosctl` can communicate through the proxy.
 
 ```mermaid
 sequenceDiagram
       participant talosctl
-      participant client as talos-proxy-client<br/>(local script)
-      participant proxy as talos-proxy (pod)<br/>(in-cluster)
+      participant client as talos-cluster-proxy-client<br/>(local script)
+      participant proxy as talos-cluster-proxy (pod)<br/>(in-cluster)
       participant node as Talos node<br/>API :50000
 
       talosctl->>client: gRPC
@@ -112,10 +112,10 @@ sequenceDiagram
 sudo ifconfig lo0 alias <node_IP>
 
 # 2. Port-forward the proxy from the cluster
-kubectl port-forward deploy/talos-proxy 50000
+kubectl port-forward deploy/talos-cluster-proxy 50000
 
 # 3. Start the client proxy listening on the target IP
-python3 scripts/talos-proxy-client.py --listen <node_IP>:50001 --target <node_IP>:50000
+python3 scripts/talos-cluster-proxy-client.py --listen <node_IP>:50001 --target <node_IP>:50000
 
 # 4. Use talosctl
 talosctl --talosconfig <path_to_talosconfig> --endpoints <node_IP>:50001 --nodes <node_IP> version

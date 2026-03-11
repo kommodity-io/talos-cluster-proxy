@@ -1,4 +1,4 @@
-module github.com/kommodity-io/talos-proxy
+module github.com/kommodity-io/talos-cluster-proxy
 
 go 1.24.5
 

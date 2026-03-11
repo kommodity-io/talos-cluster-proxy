@@ -15,5 +15,5 @@ RUN --mount=type=cache,target=/gomod-cache --mount=type=cache,target=/go-cache \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} VERSION=${VERSION} make build
 
 FROM scratch
-COPY --from=build /app/bin/talos-proxy /talos-proxy
-ENTRYPOINT ["/talos-proxy"]
+COPY --from=build /app/bin/talos-cluster-proxy /talos-cluster-proxy
+ENTRYPOINT ["/talos-cluster-proxy"]

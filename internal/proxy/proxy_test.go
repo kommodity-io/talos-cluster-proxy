@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kommodity-io/talos-proxy/internal/proxy"
+	"github.com/kommodity-io/talos-cluster-proxy/internal/proxy"
 )
 
 // startEchoServer starts a TCP server that echoes back any received data.
@@ -121,7 +121,7 @@ func TestRoundTrip(t *testing.T) {
 	conn := dialProxy(t, proxyListener.Addr().String(), echo.Addr().String())
 	defer func() { _ = conn.Close() }()
 
-	payload := []byte("hello talos-proxy")
+	payload := []byte("hello talos-cluster-proxy")
 
 	_, err := conn.Write(payload)
 	if err != nil {

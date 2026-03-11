@@ -1,4 +1,4 @@
-// Package main is the entrypoint for the talos-proxy binary.
+// Package main is the entrypoint for the talos-cluster-proxy binary.
 package main
 
 import (
@@ -13,7 +13,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/kommodity-io/talos-proxy/internal/proxy"
+	"github.com/kommodity-io/talos-cluster-proxy/internal/proxy"
 )
 
 // version is set at build time via -ldflags.
@@ -72,7 +72,7 @@ func run() error {
 		return fmt.Errorf("creating listener on %s: %w", listenAddr, err)
 	}
 
-	logger.Info("talos-proxy starting",
+	logger.Info("talos-cluster-proxy starting",
 		zap.String("version", version),
 		zap.String("listen-address", listenAddr),
 		zap.Duration("dial-timeout", *dialTimeout),
@@ -85,7 +85,7 @@ func run() error {
 		return fmt.Errorf("server exited: %w", err)
 	}
 
-	logger.Info("talos-proxy stopped")
+	logger.Info("talos-cluster-proxy stopped")
 
 	return nil
 }
