@@ -199,7 +199,6 @@ func (s *Server) bidirectionalCopy(
 	var copyWg sync.WaitGroup
 
 	copyWg.Go(func() {
-
 		s.copyAndCloseWrite(targetConn, clientConn, "client->target", remoteAddr, targetAddr)
 	})
 
