@@ -81,15 +81,15 @@ helm install talos-cluster-proxy charts/talos-cluster-proxy
 
 Key values:
 
-| Value              | Default                                    | Description                          |
-| ------------------ | ------------------------------------------ | ------------------------------------ |
-| `listenPort`       | `50000`                                    | Proxy listen port                    |
-| `dialTimeout`      | `5s`                                       | Upstream dial timeout                |
-| `allowedCIDRs`     | `""`                                       | Comma-separated allowed target CIDRs |
-| `allowedPorts`     | `"50000"`                                  | Comma-separated allowed target ports |
-| `logLevel`         | `"info"`                                   | Log level                            |
-| `image.repository` | `ghcr.io/kommodity-io/talos-cluster-proxy` | Container image repository           |
-| `image.tag`        | Chart `appVersion`                         | Container image tag                  |
+| Value              | Default                                    | Description                                          |
+| ------------------ | ------------------------------------------ | ---------------------------------------------------- |
+| `listenPort`       | `50000`                                    | Proxy listen port                                    |
+| `dialTimeout`      | `5s`                                       | Upstream dial timeout                                |
+| `allowedCIDRs`     | `""`                                       | Comma-separated allowed target CIDRs (empty = allow all) |
+| `allowedPorts`     | `""`                                       | Comma-separated allowed target ports (empty = allow all) |
+| `logLevel`         | `"info"`                                   | Log level                                            |
+| `image.repository` | `ghcr.io/kommodity-io/talos-cluster-proxy` | Container image repository                           |
+| `image.tag`        | Chart `appVersion`                         | Container image tag                                  |
 
 ## Testing with talosctl
 
