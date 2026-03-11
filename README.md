@@ -48,7 +48,7 @@ talos-cluster-proxy -allowed-cidrs 10.200.0.0/16 -allowed-ports 50000
 
 ## Building
 
-Make sure to have a recent version of Go installed. We recommend using [gvm to install Go.
+Make sure to have a recent version of Go installed. We recommend using gvm to install Go.
 
 ```bash
 gvm install go1.26.1 -B
