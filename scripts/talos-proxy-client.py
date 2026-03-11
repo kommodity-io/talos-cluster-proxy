@@ -13,7 +13,7 @@ by adding a loopback alias first:
 
 Usage:
     # With port-forward running: kubectl port-forward deploy/talos-cluster-proxy 50000
-    python3 scripts/talos-cluster-proxy-client.py --listen 10.200.0.8:50001 --target 10.200.0.8:50000
+    python3 scripts/talos-proxy-client.py --listen 10.200.0.8:50001 --target 10.200.0.8:50000
 
     # Then use talosctl against the target IP:
     talosctl --talosconfig talosconfig.yaml --endpoints 10.200.0.8:50001 --nodes 10.200.0.8 version

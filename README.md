@@ -93,7 +93,7 @@ Key values:
 
 ## Testing with talosctl
 
-Since `talosctl` uses mTLS and verifies the server certificate against the endpoint address, you need to bind a loopback alias matching the target node IP. A helper script (`scripts/talos-cluster-proxy-client.py`) injects the binary header so that `talosctl` can communicate through the proxy.
+The proxy can be tested using the helper [script](scripts/talos-proxy-client.py). It injects the binary header so that `talosctl` can communicate through the proxy.
 
 ```mermaid
 sequenceDiagram
