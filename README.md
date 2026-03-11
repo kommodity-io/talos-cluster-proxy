@@ -81,15 +81,15 @@ helm install talos-cluster-proxy charts/talos-cluster-proxy
 
 Key values:
 
-| Value              | Default                                    | Description                                          |
-| ------------------ | ------------------------------------------ | ---------------------------------------------------- |
-| `listenPort`       | `50000`                                    | Proxy listen port                                    |
-| `dialTimeout`      | `5s`                                       | Upstream dial timeout                                |
+| Value              | Default                                    | Description                                              |
+| ------------------ | ------------------------------------------ | -------------------------------------------------------- |
+| `listenPort`       | `50000`                                    | Proxy listen port                                        |
+| `dialTimeout`      | `5s`                                       | Upstream dial timeout                                    |
 | `allowedCIDRs`     | `""`                                       | Comma-separated allowed target CIDRs (empty = allow all) |
 | `allowedPorts`     | `""`                                       | Comma-separated allowed target ports (empty = allow all) |
-| `logLevel`         | `"info"`                                   | Log level                                            |
-| `image.repository` | `ghcr.io/kommodity-io/talos-cluster-proxy` | Container image repository                           |
-| `image.tag`        | Chart `appVersion`                         | Container image tag                                  |
+| `logLevel`         | `"info"`                                   | Log level                                                |
+| `image.repository` | `ghcr.io/kommodity-io/talos-cluster-proxy` | Container image repository                               |
+| `image.tag`        | Chart `appVersion`                         | Container image tag                                      |
 
 ## Testing with talosctl
 
@@ -117,10 +117,10 @@ sequenceDiagram
 sudo ifconfig lo0 alias <node_IP>
 
 # 2. Port-forward the proxy from the cluster
-kubectl port-forward deploy/talos-cluster-proxy 50000
+kubectl port-forward deploy/talos-cluster-proxy 50000 --namespace <proxy_namespace>
 
 # 3. Start the client proxy listening on the target IP
-python3 scripts/talos-cluster-proxy-client.py --listen <node_IP>:50001 --target <node_IP>:50000
+python3 scripts/talos-proxy-client.py --listen <node_IP>:50001 --target <node_IP>:50000
 
 # 4. Use talosctl
 talosctl --talosconfig <path_to_talosconfig> --endpoints <node_IP>:50001 --nodes <node_IP> version
