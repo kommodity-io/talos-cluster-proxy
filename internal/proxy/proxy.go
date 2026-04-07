@@ -20,8 +20,8 @@ const (
 	// defaultHeaderReadTimeout is the maximum time to wait for the address header.
 	defaultHeaderReadTimeout = 5 * time.Second
 
-	// defaultDialTimeout is the maximum time to wait when dialing the target.
-	defaultDialTimeout = 5 * time.Second
+	// DefaultDialTimeout is the default timeout used when dialing a target if none is specified.
+	DefaultDialTimeout = 5 * time.Second
 )
 
 // Server is a TCP proxy that reads a target address header from each incoming
@@ -39,7 +39,7 @@ func NewServer(
 	dialTimeout time.Duration, allowedCIDRs []*net.IPNet, allowedPorts []uint16, logger *zap.Logger,
 ) *Server {
 	if dialTimeout == 0 {
-		dialTimeout = defaultDialTimeout
+		dialTimeout = DefaultDialTimeout
 	}
 
 	if logger == nil {
@@ -202,7 +202,9 @@ func (s *Server) bidirectionalCopy(
 		s.copyAndCloseWrite(targetConn, clientConn, "client->target", remoteAddr, targetAddr)
 	})
 
-	s.copyAndCloseWrite(clientConn, targetConn, "target->client", remoteAddr, targetAddr)
+	copyWg.Go(func() {
+		s.copyAndCloseWrite(clientConn, targetConn, "target->client", remoteAddr, targetAddr)
+	})
 
 	copyWg.Wait()
 }

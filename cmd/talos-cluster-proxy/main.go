@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -20,8 +19,7 @@ import (
 var version = "dev"
 
 const (
-	defaultListenPort  = 50000
-	defaultDialTimeout = 5 * time.Second
+	defaultListenPort = 50000
 )
 
 func main() {
@@ -35,7 +33,7 @@ func main() {
 
 func run() error {
 	listenPort := flag.Int("listen-port", defaultListenPort, "port to listen on")
-	dialTimeout := flag.Duration("dial-timeout", defaultDialTimeout, "timeout for dialing target addresses")
+	dialTimeout := flag.Duration("dial-timeout", proxy.DefaultDialTimeout, "timeout for dialing target addresses")
 	allowedCIDRs := flag.String("allowed-cidrs", "", "comma-separated list of allowed target CIDRs (empty = allow all)")
 	allowedPorts := flag.String("allowed-ports", "", "comma-separated list of allowed target ports (empty = allow all)")
 	logLevel := flag.String("log-level", "info", "log level (debug, info, warn, error)")
