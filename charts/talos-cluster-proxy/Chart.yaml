@@ -3,4 +3,4 @@ name: talos-cluster-proxy
 description: A Helm chart for deploying talos-cluster-proxy into workload clusters
 type: application
 version: 0.1.1
-appVersion: "0.1.0"
+appVersion: "v0.1.1"

@@ -1,9 +1,9 @@
-// Package proxy implements a TCP proxy that reads a target address header
-// from each incoming connection, dials the target, and performs bidirectional
-// byte forwarding.
+// Package proxy implements an HTTP CONNECT proxy that establishes tunnels
+// to TCP targets after validating them against CIDR and port allowlists.
 package proxy
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	// defaultHeaderReadTimeout is the maximum time to wait for the address header.
+	// defaultHeaderReadTimeout is the maximum time to wait for the CONNECT request.
 	defaultHeaderReadTimeout = 5 * time.Second
 
 	// DefaultDialTimeout is the default timeout used when dialing a target if none is specified.
 	DefaultDialTimeout = 5 * time.Second
 )
 
-// Server is a TCP proxy that reads a target address header from each incoming
-// connection, dials the target, and performs bidirectional byte forwarding.
+// Server is an HTTP CONNECT proxy that dials a target and performs
+// bidirectional byte forwarding after the tunnel is established.
 type Server struct {
 	dialTimeout  time.Duration
 	allowedCIDRs []*net.IPNet
@@ -96,8 +96,8 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 
 	remoteAddr := clientConn.RemoteAddr().String()
 
-	targetAddr, err := s.readAndValidateHeader(clientConn, remoteAddr)
-	if err != nil {
+	br, targetAddr, ok := s.readAndValidateConnect(clientConn, remoteAddr)
+	if !ok {
 		return
 	}
 
@@ -116,11 +116,22 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 			zap.Error(err),
 		)
 
+		writeStatus(clientConn, "502 Bad Gateway")
+
 		return
 	}
 	defer func() { _ = targetConn.Close() }()
 
-	s.bidirectionalCopy(clientConn, targetConn, remoteAddr, targetAddr)
+	if err = WriteConnectEstablished(clientConn); err != nil {
+		s.logger.Warn("failed to write 200 response",
+			zap.String("remote", remoteAddr),
+			zap.Error(err),
+		)
+
+		return
+	}
+
+	s.bidirectionalCopy(br, clientConn, targetConn, remoteAddr, targetAddr)
 
 	s.logger.Info("connection closed",
 		zap.String("remote", remoteAddr),
@@ -128,9 +139,14 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 	)
 }
 
-// readAndValidateHeader reads the protocol header and validates the target against CIDRs.
-// Logs warnings/errors and returns an error if the connection should be dropped.
-func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (string, error) {
+// readAndValidateConnect reads the CONNECT request and validates the target
+// against CIDR and port allowlists. On failure, it writes the appropriate
+// HTTP status back to the client and returns ok=false. On success, the
+// returned bufio.Reader should be used as the client-side read source to
+// avoid losing any bytes buffered past the request headers.
+func (s *Server) readAndValidateConnect(
+	clientConn net.Conn, remoteAddr string,
+) (*bufio.Reader, string, bool) {
 	err := clientConn.SetReadDeadline(time.Now().Add(defaultHeaderReadTimeout))
 	if err != nil {
 		s.logger.Error("failed to set read deadline",
@@ -138,19 +154,23 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 			zap.Error(err),
 		)
 
-		return "", fmt.Errorf("setting header read deadline: %w", err)
+		return nil, "", false
 	}
 
-	targetAddr, err := ReadTargetAddress(clientConn)
+	br := bufio.NewReader(clientConn)
+
+	targetAddr, err := ReadConnectRequest(br)
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
-			s.logger.Warn("failed to read target address",
+			s.logger.Warn("failed to read CONNECT request",
 				zap.String("remote", remoteAddr),
 				zap.Error(err),
 			)
 		}
 
-		return "", err
+		writeStatus(clientConn, "400 Bad Request")
+
+		return nil, "", false
 	}
 
 	err = clientConn.SetReadDeadline(time.Time{})
@@ -160,7 +180,7 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 			zap.Error(err),
 		)
 
-		return "", fmt.Errorf("clearing header read deadline: %w", err)
+		return nil, "", false
 	}
 
 	err = ValidateCIDR(targetAddr, s.allowedCIDRs)
@@ -171,7 +191,9 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 			zap.Error(err),
 		)
 
-		return "", err
+		writeStatus(clientConn, "403 Forbidden")
+
+		return nil, "", false
 	}
 
 	err = ValidatePort(targetAddr, s.allowedPorts)
@@ -182,15 +204,24 @@ func (s *Server) readAndValidateHeader(clientConn net.Conn, remoteAddr string) (
 			zap.Error(err),
 		)
 
-		return "", err
+		writeStatus(clientConn, "403 Forbidden")
+
+		return nil, "", false
 	}
 
-	return targetAddr, nil
+	return br, targetAddr, true
+}
+
+// writeStatus writes a minimal HTTP/1.1 response with the given status line.
+func writeStatus(w io.Writer, status string) {
+	_, _ = fmt.Fprintf(w, "HTTP/1.1 %s\r\n\r\n", status)
 }
 
 // bidirectionalCopy performs bidirectional byte forwarding between client and target,
-// propagating half-close in each direction.
+// propagating half-close in each direction. clientReader carries any bytes that were
+// buffered past the CONNECT request headers; clientConn is used for CloseWrite.
 func (s *Server) bidirectionalCopy(
+	clientReader io.Reader,
 	clientConn net.Conn,
 	targetConn net.Conn,
 	remoteAddr string,
@@ -199,7 +230,7 @@ func (s *Server) bidirectionalCopy(
 	var copyWg sync.WaitGroup
 
 	copyWg.Go(func() {
-		s.copyAndCloseWrite(targetConn, clientConn, "client->target", remoteAddr, targetAddr)
+		s.copyAndCloseWrite(targetConn, clientReader, "client->target", remoteAddr, targetAddr)
 	})
 
 	copyWg.Go(func() {
@@ -212,7 +243,7 @@ func (s *Server) bidirectionalCopy(
 // copyAndCloseWrite copies from src to dst, then signals half-close on dst.
 func (s *Server) copyAndCloseWrite(
 	dst net.Conn,
-	src net.Conn,
+	src io.Reader,
 	direction string,
 	remoteAddr string,
 	targetAddr string,

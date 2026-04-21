@@ -1,12 +1,14 @@
 package proxy_test
 
 import (
+	"bufio"
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -91,6 +93,10 @@ func startProxy(t *testing.T, allowedCIDRs []*net.IPNet) (net.Listener, *proxy.S
 	return listener, server
 }
 
+// dialProxy opens a connection to the proxy, sends an HTTP CONNECT request for
+// targetAddr, and returns the connection after the 200 response is read.
+// Any buffered bytes past the response headers stay inside the conn — tests
+// that exchange raw bytes read directly from conn, so callers must not wrap it.
 func dialProxy(t *testing.T, proxyAddr string, targetAddr string) net.Conn {
 	t.Helper()
 
@@ -101,13 +107,47 @@ func dialProxy(t *testing.T, proxyAddr string, targetAddr string) net.Conn {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
 
-	err = proxy.WriteTargetAddress(conn, targetAddr)
+	err = writeConnectRequest(conn, targetAddr)
 	if err != nil {
 		_ = conn.Close()
-		t.Fatalf("failed to write target address: %v", err)
+		t.Fatalf("failed to write CONNECT request: %v", err)
+	}
+
+	resp, err := readHTTPResponse(conn)
+	if err != nil {
+		_ = conn.Close()
+		t.Fatalf("failed to read CONNECT response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		_ = conn.Close()
+		t.Fatalf("expected 200 from proxy, got %d", resp.StatusCode)
 	}
 
 	return conn
+}
+
+// writeConnectRequest writes an HTTP CONNECT request to w for targetAddr.
+func writeConnectRequest(w io.Writer, targetAddr string) error {
+	_, err := fmt.Fprintf(w, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", targetAddr, targetAddr)
+
+	return err
+}
+
+// readHTTPResponse reads a single HTTP response from conn.
+// It uses a bufio.Reader because http.ReadResponse requires one; any bytes
+// buffered past the response headers are discarded when the reader goes out
+// of scope, so callers that need the raw stream after the response must not
+// use this helper.
+func readHTTPResponse(conn net.Conn) (*http.Response, error) {
+	br := bufio.NewReader(conn)
+
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	return resp, nil
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -192,7 +232,8 @@ func TestLargePayload(t *testing.T) {
 	}
 }
 
-func TestInvalidHeaderTooLarge(t *testing.T) {
+// TestNonConnectMethod verifies the proxy returns 400 for a plain GET.
+func TestNonConnectMethod(t *testing.T) {
 	t.Parallel()
 
 	proxyListener, _ := startProxy(t, nil)
@@ -205,27 +246,23 @@ func TestInvalidHeaderTooLarge(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Write a length that exceeds the maximum.
-	err = binary.Write(conn, binary.BigEndian, uint32(100000))
+	_, err = fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
 	if err != nil {
-		t.Fatalf("failed to write header: %v", err)
+		t.Fatalf("failed to write GET request: %v", err)
 	}
 
-	// The proxy should close the connection. Trying to read should return EOF or error.
-	buf := make([]byte, 1)
-
-	err = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	resp, err := readHTTPResponse(conn)
 	if err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
+		t.Fatalf("failed to read response: %v", err)
 	}
 
-	_, err = conn.Read(buf)
-	if err == nil {
-		t.Fatal("expected error reading from proxy after invalid header")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
-func TestInvalidHeaderMissingPort(t *testing.T) {
+// TestInvalidConnectAddress verifies 400 is returned when CONNECT target is malformed.
+func TestInvalidConnectAddress(t *testing.T) {
 	t.Parallel()
 
 	proxyListener, _ := startProxy(t, nil)
@@ -238,30 +275,54 @@ func TestInvalidHeaderMissingPort(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Write a valid-length header but with an address missing the port.
-	addr := "10.200.0.5"
-
-	err = binary.Write(conn, binary.BigEndian, uint32(len(addr))) //nolint:gosec // test constant
+	// CONNECT without a port.
+	_, err = fmt.Fprintf(conn, "CONNECT 10.200.0.5 HTTP/1.1\r\nHost: 10.200.0.5\r\n\r\n")
 	if err != nil {
-		t.Fatalf("failed to write length: %v", err)
+		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	_, err = conn.Write([]byte(addr))
+	resp, err := readHTTPResponse(conn)
 	if err != nil {
-		t.Fatalf("failed to write address: %v", err)
+		t.Fatalf("failed to read response: %v", err)
 	}
 
-	// The proxy should close the connection.
-	buf := make([]byte, 1)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
 
-	err = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+// TestGarbageBeforeHeaders verifies 400 is returned when the request is unparseable.
+func TestGarbageBeforeHeaders(t *testing.T) {
+	t.Parallel()
+
+	proxyListener, _ := startProxy(t, nil)
+
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+
+	conn, err := dialer.DialContext(t.Context(), "tcp", proxyListener.Addr().String())
 	if err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Send a binary blob that is not a valid HTTP request.
+	_, err = conn.Write([]byte{0x00, 0x00, 0x00, 0x10, 0xff, 0xff})
+	if err != nil {
+		t.Fatalf("failed to write garbage: %v", err)
 	}
 
-	_, err = conn.Read(buf)
-	if err == nil {
-		t.Fatal("expected error reading from proxy after invalid address")
+	// Close write side so the proxy sees EOF after the garbage.
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.CloseWrite()
+	}
+
+	resp, err := readHTTPResponse(conn)
+	if err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
@@ -287,29 +348,18 @@ func TestCIDRDenied(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	err = proxy.WriteTargetAddress(conn, echo.Addr().String())
+	err = writeConnectRequest(conn, echo.Addr().String())
 	if err != nil {
-		t.Fatalf("failed to write target address: %v", err)
+		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	// Write some payload.
-	_, err = conn.Write([]byte("should not arrive"))
+	resp, err := readHTTPResponse(conn)
 	if err != nil {
-		// May fail immediately, that's ok.
-		return
+		t.Fatalf("failed to read response: %v", err)
 	}
 
-	// The proxy should close the connection.
-	buf := make([]byte, 1)
-
-	err = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
-	}
-
-	_, err = conn.Read(buf)
-	if err == nil {
-		t.Fatal("expected error reading from proxy when CIDR is denied")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
 	}
 }
 
@@ -379,22 +429,18 @@ func TestDialTimeout(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	err = proxy.WriteTargetAddress(conn, unusedAddr)
+	err = writeConnectRequest(conn, unusedAddr)
 	if err != nil {
-		t.Fatalf("failed to write target address: %v", err)
+		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	// The proxy should close the connection after failing to dial.
-	buf := make([]byte, 1)
-
-	err = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	resp, err := readHTTPResponse(conn)
 	if err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
+		t.Fatalf("failed to read response: %v", err)
 	}
 
-	_, err = conn.Read(buf)
-	if err == nil {
-		t.Fatal("expected error reading from proxy after dial failure")
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", resp.StatusCode)
 	}
 }
 
@@ -440,7 +486,8 @@ func TestHalfClosePropagation(t *testing.T) {
 	}
 }
 
-func TestHeaderReadWriteRoundTrip(t *testing.T) {
+// TestReadConnectRequest verifies the CONNECT parser accepts valid targets.
+func TestReadConnectRequest(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -456,16 +503,12 @@ func TestHeaderReadWriteRoundTrip(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			var buf bytes.Buffer
+			req := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", testCase.addr, testCase.addr)
+			br := bufio.NewReader(strings.NewReader(req))
 
-			err := proxy.WriteTargetAddress(&buf, testCase.addr)
+			addr, err := proxy.ReadConnectRequest(br)
 			if err != nil {
-				t.Fatalf("WriteTargetAddress failed: %v", err)
-			}
-
-			addr, err := proxy.ReadTargetAddress(&buf)
-			if err != nil {
-				t.Fatalf("ReadTargetAddress failed: %v", err)
+				t.Fatalf("ReadConnectRequest failed: %v", err)
 			}
 
 			if addr != testCase.addr {
@@ -475,37 +518,42 @@ func TestHeaderReadWriteRoundTrip(t *testing.T) {
 	}
 }
 
-func TestReadTargetAddressErrors(t *testing.T) {
+// TestReadConnectRequestErrors verifies the parser rejects non-CONNECT and malformed addresses.
+func TestReadConnectRequestErrors(t *testing.T) {
 	t.Parallel()
+
+	t.Run("non-CONNECT method", func(t *testing.T) {
+		t.Parallel()
+
+		req := "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n"
+		br := bufio.NewReader(strings.NewReader(req))
+
+		_, err := proxy.ReadConnectRequest(br)
+		if !errors.Is(err, proxy.ErrInvalidMethod) {
+			t.Fatalf("expected ErrInvalidMethod, got %v", err)
+		}
+	})
+
+	t.Run("missing port", func(t *testing.T) {
+		t.Parallel()
+
+		req := "CONNECT 10.200.0.5 HTTP/1.1\r\nHost: 10.200.0.5\r\n\r\n"
+		br := bufio.NewReader(strings.NewReader(req))
+
+		_, err := proxy.ReadConnectRequest(br)
+		if !errors.Is(err, proxy.ErrInvalidAddress) {
+			t.Fatalf("expected ErrInvalidAddress, got %v", err)
+		}
+	})
 
 	t.Run("empty reader", func(t *testing.T) {
 		t.Parallel()
 
-		var buf bytes.Buffer
+		br := bufio.NewReader(strings.NewReader(""))
 
-		_, err := proxy.ReadTargetAddress(&buf)
+		_, err := proxy.ReadConnectRequest(br)
 		if err == nil {
 			t.Fatal("expected error for empty reader")
-		}
-	})
-
-	t.Run("zero length", func(t *testing.T) {
-		t.Parallel()
-
-		var buf bytes.Buffer
-
-		err := binary.Write(&buf, binary.BigEndian, uint32(0))
-		if err != nil {
-			t.Fatalf("failed to write zero length: %v", err)
-		}
-
-		_, err = proxy.ReadTargetAddress(&buf)
-		if err == nil {
-			t.Fatal("expected error for zero length")
-		}
-
-		if !errors.Is(err, proxy.ErrHeaderTooLarge) {
-			t.Fatalf("expected ErrHeaderTooLarge, got %v", err)
 		}
 	})
 }
@@ -617,22 +665,18 @@ func TestPortDenied(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	err = proxy.WriteTargetAddress(conn, echo.Addr().String())
+	err = writeConnectRequest(conn, echo.Addr().String())
 	if err != nil {
-		t.Fatalf("failed to write target address: %v", err)
+		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	// The proxy should close the connection.
-	buf := make([]byte, 1)
-
-	err = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	resp, err := readHTTPResponse(conn)
 	if err != nil {
-		t.Fatalf("failed to set read deadline: %v", err)
+		t.Fatalf("failed to read response: %v", err)
 	}
 
-	_, err = conn.Read(buf)
-	if err == nil {
-		t.Fatal("expected error reading from proxy when port is denied")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
 	}
 }
 

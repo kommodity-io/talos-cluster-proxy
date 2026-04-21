@@ -3,8 +3,8 @@ package proxy
 import "errors"
 
 var (
-	// ErrHeaderTooLarge is returned when the address header exceeds the maximum allowed size.
-	ErrHeaderTooLarge = errors.New("address header exceeds maximum size")
+	// ErrInvalidMethod is returned when the request uses a method other than CONNECT.
+	ErrInvalidMethod = errors.New("invalid HTTP method: expected CONNECT")
 
 	// ErrInvalidAddress is returned when the target address is not a valid host:port pair.
 	ErrInvalidAddress = errors.New("invalid target address: must be host:port")

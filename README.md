@@ -1,17 +1,28 @@
 # talos-cluster-proxy
 
-A lightweight TCP proxy for [Talos Linux](https://www.talos.dev/) clusters. It accepts incoming connections, reads a target address from a binary header, and performs bidirectional byte forwarding to the target. Designed to proxy Talos API traffic into the cluster.
+A lightweight HTTP CONNECT proxy for [Talos Linux](https://www.talos.dev/) clusters. It accepts `CONNECT` requests, dials the target, and performs bidirectional byte forwarding. Designed to proxy Talos API traffic into the cluster.
 
 ## Protocol
 
-Each client connection begins with a simple binary header:
+The proxy speaks standard HTTP CONNECT (RFC 9110 §9.3.6):
 
-| Field          | Size    | Encoding          | Description                         |
-| -------------- | ------- | ----------------- | ----------------------------------- |
-| Address length | 4 bytes | Big-endian uint32 | Length of the target address string |
-| Address        | N bytes | UTF-8 string      | Target in `host:port` format        |
+```text
+→ CONNECT 10.200.0.5:50000 HTTP/1.1\r\nHost: 10.200.0.5:50000\r\n\r\n
+← HTTP/1.1 200 Connection established\r\n\r\n
+← [raw bytes forwarded in both directions]
+```
 
-After the header is read, the proxy dials the target and copies bytes in both directions. Half-close is propagated so that either side can signal end-of-stream independently.
+Because this is the standard proxy protocol, it works out-of-the-box with `curl --proxy`, `HTTPS_PROXY`, gRPC's `GRPC_PROXY`, `talosctl`'s `DynamicProxyDialer`, and any HTTP client library.
+
+Error responses:
+
+| Status               | Meaning                                             |
+| -------------------- | --------------------------------------------------- |
+| `400 Bad Request`    | Non-CONNECT method or malformed request             |
+| `403 Forbidden`      | Target denied by CIDR or port allowlist             |
+| `502 Bad Gateway`    | Target could not be reached                         |
+
+Half-close is propagated so either side can signal end-of-stream independently.
 
 ## Usage
 
@@ -93,38 +104,32 @@ Key values:
 
 ## Testing with talosctl
 
-The proxy can be tested using the helper [script](scripts/talos-proxy-client.py). It injects the binary header so that `talosctl` can communicate through the proxy.
+`talosctl` honours `HTTPS_PROXY` and speaks HTTP CONNECT, so no shim is required.
 
 ```mermaid
 sequenceDiagram
       participant talosctl
-      participant client as talos-cluster-proxy-client<br/>(local script)
       participant proxy as talos-cluster-proxy (pod)<br/>(in-cluster)
       participant node as Talos node<br/>API :50000
 
-      talosctl->>client: gRPC
-      client->>proxy: binary header
-      Note over client: adds header,<br/>forwards traffic
+      talosctl->>proxy: CONNECT <node_IP>:50000
+      proxy-->>talosctl: 200 Connection established
+      talosctl->>proxy: gRPC / TLS bytes
       proxy->>node: TCP
-      Note over proxy: reads header,<br/>dials target,<br/>bidirectional copy
+      Note over proxy: validates target,<br/>dials, bidirectional copy
       node-->>proxy:
-      proxy-->>client: + data
-      client-->>talosctl:
+      proxy-->>talosctl:
 ```
 
 ```sh
-# 1. Add a loopback alias so the target IP is reachable locally
-sudo ifconfig lo0 alias <node_IP>
+# 1. Port-forward the proxy from the cluster
+kubectl port-forward deploy/talos-cluster-proxy 8080:50000 --namespace <proxy_namespace>
 
-# 2. Port-forward the proxy from the cluster
-kubectl port-forward deploy/talos-cluster-proxy 50000 --namespace <proxy_namespace>
+# 2. Use talosctl via HTTPS_PROXY
+HTTPS_PROXY=http://localhost:8080 talosctl \
+    --talosconfig <path_to_talosconfig> \
+    --endpoints <node_IP> --nodes <node_IP> version
 
-# 3. Start the client proxy listening on the target IP
-python3 scripts/talos-proxy-client.py --listen <node_IP>:50001 --target <node_IP>:50000
-
-# 4. Use talosctl
-talosctl --talosconfig <path_to_talosconfig> --endpoints <node_IP>:50001 --nodes <node_IP> version
-
-# 5. Clean up when done
-sudo ifconfig lo0 -alias <node_IP>
+# 3. Or a quick connectivity check with curl
+curl -v --proxy http://localhost:8080 --proxytunnel https://<node_IP>:50000/
 ```

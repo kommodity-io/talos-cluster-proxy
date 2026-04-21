@@ -1,82 +1,37 @@
 package proxy
 
 import (
-	"encoding/binary"
+	"bufio"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 )
 
-// maxAddressLength is the maximum allowed length for a target address string.
-const maxAddressLength = 253 + 1 + 5 // max DNS name (253) + colon + port (max 65535 = 5 digits)
-
-// ReadTargetAddress reads the protocol header from conn and returns the target address.
-// The header format is: 4 bytes big-endian uint32 (address length) followed by the address string.
-func ReadTargetAddress(conn io.Reader) (string, error) {
-	var length uint32
-
-	err := binary.Read(conn, binary.BigEndian, &length)
+// ReadConnectRequest reads an HTTP CONNECT request from br and returns the target address.
+func ReadConnectRequest(br *bufio.Reader) (string, error) {
+	req, err := http.ReadRequest(br)
 	if err != nil {
-		return "", fmt.Errorf("reading address length: %w", err)
+		return "", fmt.Errorf("reading HTTP request: %w", err)
 	}
 
-	if length == 0 || length > maxAddressLength {
-		return "", fmt.Errorf("%w: length %d exceeds max %d", ErrHeaderTooLarge, length, maxAddressLength)
+	if req.Method != http.MethodConnect {
+		return "", fmt.Errorf("%w: expected CONNECT, got %s", ErrInvalidMethod, req.Method)
 	}
 
-	buf := make([]byte, length)
-
-	_, err = io.ReadFull(conn, buf)
-	if err != nil {
-		return "", fmt.Errorf("reading address bytes: %w", err)
+	host, port, err := net.SplitHostPort(req.Host)
+	if err != nil || host == "" || port == "" {
+		return "", fmt.Errorf("%w: %s", ErrInvalidAddress, req.Host)
 	}
 
-	addr := string(buf)
-
-	err = validateAddress(addr)
-	if err != nil {
-		return "", err
-	}
-
-	return addr, nil
+	return req.Host, nil
 }
 
-// WriteTargetAddress writes the protocol header to conn for the given target address.
-// The header format is: 4 bytes big-endian uint32 (address length) followed by the address string.
-func WriteTargetAddress(conn io.Writer, addr string) error {
-	err := validateAddress(addr)
+// WriteConnectEstablished writes a 200 Connection established response to w.
+func WriteConnectEstablished(w io.Writer) error {
+	_, err := fmt.Fprintf(w, "HTTP/1.1 200 Connection established\r\n\r\n")
 	if err != nil {
-		return err
-	}
-
-	if len(addr) > maxAddressLength {
-		return fmt.Errorf("%w: length %d exceeds max %d", ErrHeaderTooLarge, len(addr), maxAddressLength)
-	}
-
-	length := uint32(len(addr)) //nolint:gosec // bounds checked above
-
-	err = binary.Write(conn, binary.BigEndian, length)
-	if err != nil {
-		return fmt.Errorf("writing address length: %w", err)
-	}
-
-	_, err = conn.Write([]byte(addr))
-	if err != nil {
-		return fmt.Errorf("writing address bytes: %w", err)
-	}
-
-	return nil
-}
-
-// validateAddress checks that addr is a valid host:port pair.
-func validateAddress(addr string) error {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidAddress, addr)
-	}
-
-	if host == "" || port == "" {
-		return fmt.Errorf("%w: %s", ErrInvalidAddress, addr)
+		return fmt.Errorf("writing CONNECT response: %w", err)
 	}
 
 	return nil
