@@ -137,6 +137,19 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 
+	// Propagate shutdown into the tunnel: closing both conns unblocks io.Copy so Serve can drain.
+	stop := make(chan struct{})
+	defer close(stop)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = clientConn.Close()
+			_ = targetConn.Close()
+		case <-stop:
+		}
+	}()
+
 	s.bidirectionalCopy(clientReader, clientConn, targetConn, remoteAddr, targetAddr)
 
 	s.logger.Info("connection closed",
@@ -185,6 +198,8 @@ func (s *Server) readAndValidateConnect(
 			zap.String("remote", remoteAddr),
 			zap.Error(err),
 		)
+
+		writeStatus(clientConn, "500 Internal Server Error")
 
 		return nil, "", false
 	}

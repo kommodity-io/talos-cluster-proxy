@@ -3,6 +3,7 @@ package proxy_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -760,6 +761,62 @@ func TestActiveConnections(t *testing.T) {
 	_ = conn.Close()
 
 	waitForActiveConnections(t, server, 0)
+}
+
+// TestGracefulShutdownWithActiveTunnel verifies that cancelling the context
+// while a tunnel is open causes Serve to return promptly instead of blocking
+// on io.Copy inside bidirectionalCopy.
+func TestGracefulShutdownWithActiveTunnel(t *testing.T) {
+	t.Parallel()
+
+	echo := startEchoServer(t)
+	defer func() { _ = echo.Close() }()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0") //nolint:noctx // test helper
+	if err != nil {
+		t.Fatalf("failed to start proxy listener: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	server := proxy.NewServer(5*time.Second, nil, nil, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	serveDone := make(chan error, 1)
+
+	go func() { serveDone <- server.Serve(ctx, listener) }()
+
+	conn := dialProxy(t, listener.Addr().String(), echo.Addr().String())
+	defer func() { _ = conn.Close() }()
+
+	// Prove the tunnel is live before cancelling.
+	payload := []byte("alive")
+
+	_, err = conn.Write(payload)
+	if err != nil {
+		t.Fatalf("failed to write payload: %v", err)
+	}
+
+	buf := make([]byte, len(payload))
+
+	_, err = io.ReadFull(conn, buf)
+	if err != nil {
+		t.Fatalf("failed to read echo: %v", err)
+	}
+
+	waitForActiveConnections(t, server, 1)
+
+	cancel()
+
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatalf("Serve returned error: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatalf("Serve did not return within 1s after ctx cancel (active tunnel blocked drain)")
+	}
 }
 
 // waitForActiveConnections polls server.ActiveConnections until it matches want
