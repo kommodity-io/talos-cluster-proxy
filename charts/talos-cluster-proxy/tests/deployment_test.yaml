@@ -23,7 +23,7 @@ tests:
           value: 1
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/kommodity-io/talos-cluster-proxy:0.1.0"
+          value: "ghcr.io/kommodity-io/talos-cluster-proxy:v0.1.1"
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
