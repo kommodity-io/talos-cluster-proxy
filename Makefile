@@ -9,7 +9,7 @@ LINTER := bin/golangci-lint
 # Set up the linter.
 golangci-lint: $(LINTER) ## Download golangci-lint locally if necessary.
 $(LINTER):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b bin/ v2.9.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b bin/ v2.11.4
 
 build: bin/talos-cluster-proxy
 
