@@ -96,7 +96,7 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 
 	remoteAddr := clientConn.RemoteAddr().String()
 
-	br, targetAddr, ok := s.readAndValidateConnect(clientConn, remoteAddr)
+	clientReader, targetAddr, ok := s.readAndValidateConnect(clientConn, remoteAddr)
 	if !ok {
 		return
 	}
@@ -122,7 +122,8 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 	}
 	defer func() { _ = targetConn.Close() }()
 
-	if err = WriteConnectEstablished(clientConn); err != nil {
+	err = WriteConnectEstablished(clientConn)
+	if err != nil {
 		s.logger.Warn("failed to write 200 response",
 			zap.String("remote", remoteAddr),
 			zap.Error(err),
@@ -131,7 +132,7 @@ func (s *Server) handleConnection(ctx context.Context, clientConn net.Conn) {
 		return
 	}
 
-	s.bidirectionalCopy(br, clientConn, targetConn, remoteAddr, targetAddr)
+	s.bidirectionalCopy(clientReader, clientConn, targetConn, remoteAddr, targetAddr)
 
 	s.logger.Info("connection closed",
 		zap.String("remote", remoteAddr),
@@ -157,9 +158,9 @@ func (s *Server) readAndValidateConnect(
 		return nil, "", false
 	}
 
-	br := bufio.NewReader(clientConn)
+	clientReader := bufio.NewReader(clientConn)
 
-	targetAddr, err := ReadConnectRequest(br)
+	targetAddr, err := ReadConnectRequest(clientReader)
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			s.logger.Warn("failed to read CONNECT request",
@@ -183,7 +184,17 @@ func (s *Server) readAndValidateConnect(
 		return nil, "", false
 	}
 
-	err = ValidateCIDR(targetAddr, s.allowedCIDRs)
+	if !s.checkAllowlists(clientConn, remoteAddr, targetAddr) {
+		return nil, "", false
+	}
+
+	return clientReader, targetAddr, true
+}
+
+// checkAllowlists runs CIDR + port allowlist checks, writing 403 and returning
+// false if either fails.
+func (s *Server) checkAllowlists(clientConn net.Conn, remoteAddr, targetAddr string) bool {
+	err := ValidateCIDR(targetAddr, s.allowedCIDRs)
 	if err != nil {
 		s.logger.Warn("target address denied by CIDR policy",
 			zap.String("remote", remoteAddr),
@@ -193,7 +204,7 @@ func (s *Server) readAndValidateConnect(
 
 		writeStatus(clientConn, "403 Forbidden")
 
-		return nil, "", false
+		return false
 	}
 
 	err = ValidatePort(targetAddr, s.allowedPorts)
@@ -206,10 +217,10 @@ func (s *Server) readAndValidateConnect(
 
 		writeStatus(clientConn, "403 Forbidden")
 
-		return nil, "", false
+		return false
 	}
 
-	return br, targetAddr, true
+	return true
 }
 
 // writeStatus writes a minimal HTTP/1.1 response with the given status line.

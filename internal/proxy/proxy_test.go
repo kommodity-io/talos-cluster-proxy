@@ -113,15 +113,15 @@ func dialProxy(t *testing.T, proxyAddr string, targetAddr string) net.Conn {
 		t.Fatalf("failed to write CONNECT request: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		_ = conn.Close()
 		t.Fatalf("failed to read CONNECT response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if status != http.StatusOK {
 		_ = conn.Close()
-		t.Fatalf("expected 200 from proxy, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 from proxy, got %d", status)
 	}
 
 	return conn
@@ -130,24 +130,28 @@ func dialProxy(t *testing.T, proxyAddr string, targetAddr string) net.Conn {
 // writeConnectRequest writes an HTTP CONNECT request to w for targetAddr.
 func writeConnectRequest(w io.Writer, targetAddr string) error {
 	_, err := fmt.Fprintf(w, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", targetAddr, targetAddr)
+	if err != nil {
+		return fmt.Errorf("writing CONNECT request: %w", err)
+	}
 
-	return err
+	return nil
 }
 
-// readHTTPResponse reads a single HTTP response from conn.
+// readResponseStatus reads a single HTTP response from conn and returns its status code.
 // It uses a bufio.Reader because http.ReadResponse requires one; any bytes
 // buffered past the response headers are discarded when the reader goes out
 // of scope, so callers that need the raw stream after the response must not
 // use this helper.
-func readHTTPResponse(conn net.Conn) (*http.Response, error) {
+func readResponseStatus(conn net.Conn) (int, error) {
 	br := bufio.NewReader(conn)
 
 	resp, err := http.ReadResponse(br, nil)
 	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
+		return 0, fmt.Errorf("reading response: %w", err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
-	return resp, nil
+	return resp.StatusCode, nil
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -251,13 +255,13 @@ func TestNonConnectMethod(t *testing.T) {
 		t.Fatalf("failed to write GET request: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	if status !=http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", status)
 	}
 }
 
@@ -281,13 +285,13 @@ func TestInvalidConnectAddress(t *testing.T) {
 		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	if status !=http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", status)
 	}
 }
 
@@ -316,13 +320,13 @@ func TestGarbageBeforeHeaders(t *testing.T) {
 		_ = tc.CloseWrite()
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	if status !=http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", status)
 	}
 }
 
@@ -353,13 +357,13 @@ func TestCIDRDenied(t *testing.T) {
 		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	if status !=http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", status)
 	}
 }
 
@@ -434,13 +438,13 @@ func TestDialTimeout(t *testing.T) {
 		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expected 502, got %d", resp.StatusCode)
+	if status !=http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", status)
 	}
 }
 
@@ -670,13 +674,13 @@ func TestPortDenied(t *testing.T) {
 		t.Fatalf("failed to write CONNECT: %v", err)
 	}
 
-	resp, err := readHTTPResponse(conn)
+	status, err := readResponseStatus(conn)
 	if err != nil {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	if status !=http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", status)
 	}
 }
 
