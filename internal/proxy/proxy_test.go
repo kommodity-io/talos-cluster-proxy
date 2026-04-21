@@ -260,7 +260,7 @@ func TestNonConnectMethod(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusBadRequest {
+	if status != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", status)
 	}
 }
@@ -290,7 +290,7 @@ func TestInvalidConnectAddress(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusBadRequest {
+	if status != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", status)
 	}
 }
@@ -325,7 +325,7 @@ func TestGarbageBeforeHeaders(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusBadRequest {
+	if status != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", status)
 	}
 }
@@ -362,7 +362,7 @@ func TestCIDRDenied(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusForbidden {
+	if status != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", status)
 	}
 }
@@ -443,7 +443,7 @@ func TestDialTimeout(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusBadGateway {
+	if status != http.StatusBadGateway {
 		t.Fatalf("expected 502, got %d", status)
 	}
 }
@@ -679,7 +679,7 @@ func TestPortDenied(t *testing.T) {
 		t.Fatalf("failed to read response: %v", err)
 	}
 
-	if status !=http.StatusForbidden {
+	if status != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", status)
 	}
 }
