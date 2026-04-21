@@ -14,13 +14,15 @@ The proxy speaks standard HTTP CONNECT (RFC 9110 §9.3.6):
 
 Because this is the standard proxy protocol, it works out-of-the-box with `curl --proxy`, `HTTPS_PROXY`, gRPC's `GRPC_PROXY`, `talosctl`'s `DynamicProxyDialer`, and any HTTP client library.
 
+The CONNECT target must be an IP literal (IPv4 or IPv6) with a port. Hostnames are rejected so that the CIDR allowlist is authoritative and enforcement does not depend on DNS resolution (which would be vulnerable to TOCTOU between the check and the dial).
+
 Error responses:
 
-| Status               | Meaning                                             |
-| -------------------- | --------------------------------------------------- |
-| `400 Bad Request`    | Non-CONNECT method or malformed request             |
-| `403 Forbidden`      | Target denied by CIDR or port allowlist             |
-| `502 Bad Gateway`    | Target could not be reached                         |
+| Status            | Meaning                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `400 Bad Request` | Non-CONNECT method, malformed request, or hostname in the target |
+| `403 Forbidden`   | Target denied by CIDR or port allowlist                          |
+| `502 Bad Gateway` | Target could not be reached                                      |
 
 Half-close is propagated so either side can signal end-of-stream independently.
 

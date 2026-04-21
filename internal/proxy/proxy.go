@@ -66,12 +66,15 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		_ = listener.Close()
 	}()
 
+	var waitGroup sync.WaitGroup
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				s.logger.Info("proxy server shutting down")
+				s.logger.Info("proxy server shutting down, waiting for active connections to drain")
+				waitGroup.Wait()
 
 				return nil
 			default:
@@ -79,7 +82,9 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 			}
 		}
 
-		go s.handleConnection(ctx, conn)
+		waitGroup.Go(func() {
+			s.handleConnection(ctx, conn)
+		})
 	}
 }
 

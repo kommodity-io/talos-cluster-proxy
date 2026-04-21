@@ -500,7 +500,6 @@ func TestReadConnectRequest(t *testing.T) {
 	}{
 		{name: "ipv4", addr: "10.200.0.5:50000"},
 		{name: "ipv6", addr: "[::1]:50000"},
-		{name: "hostname", addr: "node1.cluster.local:50000"},
 	}
 
 	for _, testCase := range tests {
@@ -558,6 +557,18 @@ func TestReadConnectRequestErrors(t *testing.T) {
 		_, err := proxy.ReadConnectRequest(br)
 		if err == nil {
 			t.Fatal("expected error for empty reader")
+		}
+	})
+
+	t.Run("hostname rejected", func(t *testing.T) {
+		t.Parallel()
+
+		req := "CONNECT node1.cluster.local:50000 HTTP/1.1\r\nHost: node1.cluster.local:50000\r\n\r\n"
+		br := bufio.NewReader(strings.NewReader(req))
+
+		_, err := proxy.ReadConnectRequest(br)
+		if !errors.Is(err, proxy.ErrHostnameNotAllowed) {
+			t.Fatalf("expected ErrHostnameNotAllowed, got %v", err)
 		}
 	})
 }
@@ -744,19 +755,30 @@ func TestActiveConnections(t *testing.T) {
 
 	conn := dialProxy(t, proxyListener.Addr().String(), echo.Addr().String())
 
-	// Give the proxy goroutine time to increment the counter.
-	time.Sleep(100 * time.Millisecond)
-
-	if server.ActiveConnections() != 1 {
-		t.Fatalf("expected 1 active connection, got %d", server.ActiveConnections())
-	}
+	waitForActiveConnections(t, server, 1)
 
 	_ = conn.Close()
 
-	// Give the proxy goroutine time to decrement the counter.
-	time.Sleep(100 * time.Millisecond)
+	waitForActiveConnections(t, server, 0)
+}
 
-	if server.ActiveConnections() != 0 {
-		t.Fatalf("expected 0 active connections after close, got %d", server.ActiveConnections())
+// waitForActiveConnections polls server.ActiveConnections until it matches want
+// or the timeout elapses. Replaces fixed sleeps that were flaky on slow CI.
+func waitForActiveConnections(t *testing.T, server *proxy.Server, want int64) {
+	t.Helper()
+
+	const (
+		timeout = time.Second
+		tick    = 5 * time.Millisecond
+	)
+
+	deadline := time.Now().Add(timeout)
+	for server.ActiveConnections() != want && time.Now().Before(deadline) {
+		time.Sleep(tick)
+	}
+
+	got := server.ActiveConnections()
+	if got != want {
+		t.Fatalf("expected %d active connections, got %d after %s", want, got, timeout)
 	}
 }

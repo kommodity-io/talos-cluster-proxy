@@ -9,6 +9,8 @@ import (
 )
 
 // ReadConnectRequest reads an HTTP CONNECT request from br and returns the target address.
+// The target host must be an IP literal (IPv4 or IPv6); hostnames are rejected so that
+// the CIDR allowlist check is authoritative and does not depend on DNS resolution.
 func ReadConnectRequest(br *bufio.Reader) (string, error) {
 	req, err := http.ReadRequest(br)
 	if err != nil {
@@ -22,6 +24,10 @@ func ReadConnectRequest(br *bufio.Reader) (string, error) {
 	host, port, err := net.SplitHostPort(req.Host)
 	if err != nil || host == "" || port == "" {
 		return "", fmt.Errorf("%w: %s", ErrInvalidAddress, req.Host)
+	}
+
+	if net.ParseIP(host) == nil {
+		return "", fmt.Errorf("%w: %s", ErrHostnameNotAllowed, req.Host)
 	}
 
 	return req.Host, nil
