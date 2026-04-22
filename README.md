@@ -14,7 +14,7 @@ The proxy speaks standard HTTP CONNECT (RFC 9110 §9.3.6):
 
 Because this is the standard proxy protocol, it works out-of-the-box with `curl --proxy`, `HTTPS_PROXY`, gRPC's `GRPC_PROXY`, `talosctl`'s `DynamicProxyDialer`, and any HTTP client library.
 
-The CONNECT target must be an IP literal (IPv4 or IPv6) with a port. Hostnames are rejected so that the CIDR allowlist is authoritative and enforcement does not depend on DNS resolution (which would be vulnerable to TOCTOU between the check and the dial).
+The CONNECT target must be an IP literal (IPv4 or IPv6) with a port. Hostnames are rejected so that the CIDR allowlist is authoritative.
 
 Error responses:
 
