@@ -21,16 +21,16 @@ func ReadConnectRequest(br *bufio.Reader) (string, error) {
 		return "", fmt.Errorf("%w: expected CONNECT, got %s", ErrInvalidMethod, req.Method)
 	}
 
-	host, port, err := net.SplitHostPort(req.Host)
+	host, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil || host == "" || port == "" {
-		return "", fmt.Errorf("%w: %s", ErrInvalidAddress, req.Host)
+		return "", fmt.Errorf("%w: %s", ErrInvalidAddress, req.URL.Host)
 	}
 
 	if net.ParseIP(host) == nil {
-		return "", fmt.Errorf("%w: %s", ErrHostnameNotAllowed, req.Host)
+		return "", fmt.Errorf("%w: %s", ErrHostnameNotAllowed, req.URL.Host)
 	}
 
-	return req.Host, nil
+	return req.URL.Host, nil
 }
 
 // WriteConnectEstablished writes a 200 Connection established response to w.
