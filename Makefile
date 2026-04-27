@@ -6,7 +6,7 @@ SOURCES			:= $(shell find . -name '*.go')
 # Set up the linter. Version pinned via `tool` directive in go.mod.
 LINTER := go tool golangci-lint
 
-.PHONY: build test lint golangci-lint clean build-image helm-test
+.PHONY: build test lint lint-fix clean build-image helm-test
 
 build: bin/talos-cluster-proxy
 
