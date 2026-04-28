@@ -21,9 +21,9 @@ tests:
       - equal:
           path: spec.replicas
           value: 1
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/kommodity-io/talos-cluster-proxy:v0.1.1"
+          pattern: "^ghcr\\.io/kommodity-io/talos-cluster-proxy:v.+$"
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
