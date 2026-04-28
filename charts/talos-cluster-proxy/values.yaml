@@ -1,0 +1,48 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/kommodity-io/talos-cluster-proxy
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- Port the proxy listens on
+listenPort: 50000
+
+service:
+  # -- Whether to create a Service for the proxy
+  enabled: true
+  # -- Kubernetes Service type
+  type: ClusterIP
+  # -- Service port
+  port: 50000
+
+# -- Timeout for dialing upstream Talos API
+dialTimeout: "5s"
+
+# -- Comma-separated list of allowed CIDRs (empty = allow all)
+allowedCIDRs: ""
+
+# -- Comma-separated list of allowed target ports (empty = allow all)
+allowedPorts: ""
+
+# -- Log level (debug, info, warn, error)
+logLevel: "info"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    memory: 64Mi
+
+# -- Node selector for pod scheduling
+# Example:
+#   node-role.kubernetes.io/control-plane: ""
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+# Example:
+#   - key: node-role.kubernetes.io/control-plane
+#     effect: NoSchedule
+tolerations: []

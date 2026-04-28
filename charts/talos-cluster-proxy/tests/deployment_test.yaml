@@ -1,0 +1,124 @@
+suite: talos-cluster-proxy deployment
+release:
+  name: test-release
+  namespace: kube-system
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should render a Deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: test-release-talos-cluster-proxy
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: talos-cluster-proxy
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: test-release
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/kommodity-io/talos-cluster-proxy:v0.1.1"
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: IfNotPresent
+
+  - it: should use custom image tag when set
+    set:
+      image.tag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/kommodity-io/talos-cluster-proxy:v1.2.3"
+
+  - it: should not include allowed-cidrs flag when empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--allowed-cidrs="
+          any: true
+
+  - it: should include allowed-cidrs flag when set
+    set:
+      allowedCIDRs: "10.0.0.0/8,172.16.0.0/12"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--allowed-cidrs=10.0.0.0/8,172.16.0.0/12"
+
+  - it: should set custom resources
+    set:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 128Mi
+
+  - it: should always have security context set
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 65534
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: should set default listen-port and dial-timeout args
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listen-port=50000"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--dial-timeout=5s"
+
+  - it: should use custom listen port and dial timeout
+    set:
+      listenPort: 60000
+      dialTimeout: "10s"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--listen-port=60000"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--dial-timeout=10s"
+
+  - it: should set nodeSelector and tolerations when configured
+    set:
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector["node-role.kubernetes.io/control-plane"]
+          value: ""
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: node-role.kubernetes.io/control-plane
+            effect: NoSchedule

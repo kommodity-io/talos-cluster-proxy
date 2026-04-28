@@ -1,0 +1,409 @@
+name: Helm
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm.yml"
+
+jobs:
+  diff-charts:
+    name: Generate diff of charts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: main
+          path: main
+
+      - name: Setup Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Diff charts
+        id: diff
+        run: |
+          set -eou pipefail
+
+          cd pr
+
+          git fetch origin main
+          mapfile -t changed_charts < <(git diff --name-only origin/main | grep -oE '^charts/([^/]+)' | sed 's/charts\///' | sort -u)
+
+          cd ..
+
+          changed=0
+          touch changes.md
+
+          template () {
+            source="$1"
+            chart="$2"
+
+            # If the chart never existed or was deleted, create an empty file.
+            if [[ ! -d "$source/charts/$chart" ]]; then
+              touch "$source.yaml"
+              return
+            fi
+
+            # Build dependencies.
+            [[ ! -f "$source/charts/$chart/Chart.lock" ]] && helm dependency build "$source/charts/$chart"
+
+            helm template release "$source/charts/$chart" >"$source.yaml"
+          }
+
+          for chart in "${changed_charts[@]}"; do
+            template main "$chart"
+            template pr "$chart"
+
+            if ! changes="$(diff -u main.yaml pr.yaml)"; then
+              {
+                echo "<details>"
+                echo "<summary><code>helm template release charts/$chart</code></summary>"
+                echo ""
+                echo '```diff'
+                echo "$changes"
+                echo '```'
+                echo ""
+                echo "</details>"
+                echo ""
+              } >>changes.md
+              {
+                echo "$changes"
+              } >>"$chart.diff"
+              ((changed+=1))
+            fi
+          done
+
+          echo "changed=$changed" >>"$GITHUB_OUTPUT"
+
+          # Check if the character count exceeds the limit.
+          if [[ $(wc -c <changes.md) -gt 65400 ]]; then
+            echo "long=1" >>"$GITHUB_OUTPUT"
+          else
+            echo "long=0" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload diffs
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        id: diff-upload
+        if: steps.diff.outputs.changed != '0' && steps.diff.outputs.long == '1'
+        with:
+          name: chart-diffs
+          path: "*.diff"
+
+      - name: Create diff comment
+        id: diff-comment
+        run: |
+          set -eou pipefail
+
+          # Check if the character count exceeds the limit.
+          if [[ $(wc -c <changes.md) -gt 65400 ]]; then
+            {
+              echo 'changes<<EOF'
+              echo "Changes are too long to be displayed inline. [Download the diffs here](${{ steps.diff-upload.outputs.artifact-url }})."
+              echo EOF
+            } >>"$GITHUB_OUTPUT"
+          else
+            {
+              echo 'changes<<EOF'
+              cat changes.md
+              echo EOF
+            } >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Find diff comment
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4
+        id: find-diff
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: "Chart changes"
+
+      - name: Publish chart changes
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
+        if: steps.diff.outputs.changed != '0'
+        with:
+          comment-id: ${{ steps.find-diff.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 💥 Chart changes
+
+            The following charts have been modified.
+
+            ${{ steps.diff-comment.outputs.changes }}
+          edit-mode: replace
+
+      - name: Delete diff comment
+        if: steps.diff.outputs.changed == '0' && steps.find-diff.outputs.comment-id != ''
+        run: gh api /repos/${{ github.repository }}/issues/comments/${{ steps.find-diff.outputs.comment-id }} -X DELETE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for pending version updates
+        id: version
+        run: |
+          set -eou pipefail
+
+          cd pr
+
+          git fetch origin main
+          mapfile -t changed_charts < <(git diff --name-only origin/main | grep -oE '^charts/([^/]+)' | sed 's/charts\///' | sort -u)
+
+          cd ..
+
+          pending=0
+          touch pending.md
+
+          echo '| Chart | Valid | `main` | `HEAD` |' >>pending.md
+          echo '| --- | --- | --- | --- |' >>pending.md
+
+          for chart in "${changed_charts[@]}"; do
+            # This is a deleted chart. Any version is valid.
+            if [[ ! -d "pr/charts/$chart" ]]; then
+              echo "| $chart | ✅ | N/A | N/A |" >>pending.md
+              continue
+            fi
+
+            pr_version=$(grep -oP '^version: \K[^\n]+' pr/charts/$chart/Chart.yaml | tr -d '\n')
+
+            # This is a new chart. Any version is valid.
+            if [[ ! -d "main/charts/$chart" ]]; then
+              echo "| $chart | ✅ | N/A | $pr_version |" >>pending.md
+              continue
+            fi
+
+            main_version=$(grep -oP '^version: \K[^\n]+' main/charts/$chart/Chart.yaml | tr -d '\n')
+
+            # The version in the `Chart.yaml` file has been updated.
+            if [[ "$main_version" != "$pr_version" ]]; then
+              echo "| $chart | ✅ | $main_version | $pr_version |" >>pending.md
+              continue
+            fi
+
+            # The version in the `Chart.yaml` file has not been updated.
+            echo "| $chart | ❌ | $main_version | $pr_version |" >>pending.md
+            ((pending+=1))
+          done
+
+          echo "pending=$pending" >>"$GITHUB_OUTPUT"
+
+          {
+            echo 'log<<EOF'
+            cat pending.md
+            echo EOF
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Find pending version updates comment
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4
+        id: find-version
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: "Pending version updates"
+
+      - name: Publish pending version updates
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
+        if: steps.version.outputs.pending != '0'
+        with:
+          comment-id: ${{ steps.find-version.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## 📦 Pending version updates
+
+            When a chart is changed, the version in the `Chart.yaml` file must be updated.
+
+            ${{ steps.version.outputs.log }}
+          edit-mode: replace
+
+      - name: Delete pending version updates comment
+        if: steps.version.outputs.pending == '0' && steps.find-version.outputs.comment-id != ''
+        run: gh api /repos/${{ github.repository }}/issues/comments/${{ steps.find-version.outputs.comment-id }} -X DELETE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint charts
+        id: lint
+        run: |
+          set -eou pipefail
+
+          cd pr
+
+          mapfile -t charts < <(find charts -mindepth 1 -maxdepth 1 -type d)
+
+          cd ..
+
+          for chart in "${charts[@]}"; do
+            [[ ! -f "pr/$chart/Chart.lock" ]] && helm dependency build pr/$chart
+          done
+
+          if output=$(helm lint pr/charts/* --strict); then
+            echo 'result=0' >>"$GITHUB_OUTPUT"
+          else
+            echo 'result=1' >>"$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo 'log<<EOF'
+            echo "$output"
+            echo EOF
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Find lint comment
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4
+        id: find-lint
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: "Helm linting"
+
+      - name: Publish lint results
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
+        if: steps.lint.outputs.result != '0'
+        with:
+          comment-id: ${{ steps.find-lint.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## ☸️ Helm linting
+
+            <details>
+            <summary><code>helm lint charts/* --strict</code></summary>
+
+            ```txt
+            ${{ steps.lint.outputs.log }}
+            ```
+
+            </details>
+          edit-mode: replace
+
+      - name: Delete lint comment
+        if: steps.lint.outputs.result == '0' && steps.find-lint.outputs.comment-id != ''
+        run: gh api /repos/${{ github.repository }}/issues/comments/${{ steps.find-lint.outputs.comment-id }} -X DELETE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail on pending version updates
+        if: steps.version.outputs.pending != '0'
+        run: exit 1
+
+      - name: Fail on lint errors
+        if: steps.lint.outputs.result != '0'
+        run: exit 1
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --verify=false --version 1.0.3
+
+      - name: Run helm unittest
+        id: unittest
+        run: |
+          set -eou pipefail
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            base="HEAD~1"
+          else
+            git fetch origin main
+            base="origin/main"
+          fi
+          mapfile -t changed_charts < <(git diff --name-only "$base" | grep -oE '^charts/([^/]+)' | sed 's/charts\///' | sort -u)
+
+
+          echo "result=success" >> "$GITHUB_OUTPUT"
+          exit_code=0
+
+          for chart in "${changed_charts[@]}"; do
+
+            set +e
+            output=$(helm unittest "charts/${chart}" 2>&1)
+            last_exit_code=$?
+            set -e
+
+            echo "$output"
+
+            # Save output to file for artifact upload
+            mkdir -p test-results
+            echo "$output" > "test-results/${chart}.txt"
+
+            # Determine result status
+            if [[ $last_exit_code -ne 0 ]]; then
+              echo "result=failure" >> "$GITHUB_OUTPUT"
+              exit_code=$last_exit_code
+            fi
+          done
+
+          exit $exit_code
+
+  publish-charts:
+    name: Publish charts
+    runs-on: ubuntu-latest
+    needs:
+      - unit-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+
+      - name: Publish charts
+        run: |
+          set -eou pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username ${{ github.actor }} --password-stdin
+
+          mapfile -t changed_charts < <(git diff --name-only HEAD~1 | grep -oP 'charts/\K[^/]+' | sort -u)
+
+          for chart in "${changed_charts[@]}"; do
+            # If the chart was deleted, skip it.
+            if [[ ! -d "charts/$chart" ]]; then
+              echo "Skipping deleted chart: $chart"
+              continue
+            fi
+
+            [[ ! -f "charts/$chart/Chart.lock" ]] && helm dependency build "charts/$chart"
+            helm package "charts/$chart"
+            helm push $chart-*.tgz oci://ghcr.io/kommodity-io/charts
+            if [[ -f "charts/$chart/artifacthub-repo.yml" ]]; then
+              oras push \
+                "ghcr.io/kommodity-io/charts/$chart:artifacthub.io" \
+                --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+                "charts/$chart/artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml"
+            fi
+          done

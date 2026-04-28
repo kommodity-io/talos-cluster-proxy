@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "talos-cluster-proxy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "talos-cluster-proxy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "talos-cluster-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "talos-cluster-proxy.selectorLabels" . | nindent 8 }}
+    spec:
+      hostNetwork: false
+      containers:
+        - name: talos-cluster-proxy
+          image: {{ include "talos-cluster-proxy.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --listen-port={{ .Values.listenPort }}
+            - --dial-timeout={{ .Values.dialTimeout }}
+            - --log-level={{ .Values.logLevel }}
+            {{- if .Values.allowedCIDRs }}
+            - --allowed-cidrs={{ .Values.allowedCIDRs }}
+            {{- end }}
+            {{- if .Values.allowedPorts }}
+            - --allowed-ports={{ .Values.allowedPorts }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.listenPort }}
+              name: proxy
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.listenPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.listenPort }}
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
