@@ -9,6 +9,14 @@ image:
 # -- Port the proxy listens on
 listenPort: 50000
 
+service:
+  # -- Whether to create a Service for the proxy
+  enabled: true
+  # -- Kubernetes Service type
+  type: ClusterIP
+  # -- Service port
+  port: 50000
+
 # -- Timeout for dialing upstream Talos API
 dialTimeout: "5s"
 

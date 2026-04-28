@@ -16,6 +16,7 @@ func ReadConnectRequest(br *bufio.Reader) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading HTTP request: %w", err)
 	}
+	defer req.Body.Close()
 
 	if req.Method != http.MethodConnect {
 		return "", fmt.Errorf("%w: expected CONNECT, got %s", ErrInvalidMethod, req.Method)
