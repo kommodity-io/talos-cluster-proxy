@@ -88,7 +88,7 @@ jobs:
               {
                 echo "$changes"
               } >>"$chart.diff"
-              changed+=1
+              ((changed+=1))
             fi
           done
 
@@ -200,7 +200,7 @@ jobs:
 
             # The version in the `Chart.yaml` file has not been updated.
             echo "| $chart | ❌ | $main_version | $pr_version |" >>pending.md
-            pending+=1
+            ((pending+=1))
           done
 
           echo "pending=$pending" >>"$GITHUB_OUTPUT"
@@ -313,6 +313,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
 
       - name: Setup Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -325,8 +327,13 @@ jobs:
         run: |
           set -eou pipefail
 
-          git fetch origin main
-          mapfile -t changed_charts < <(git diff --name-only origin/main | grep -oE '^charts/([^/]+)' | sed 's/charts\///' | sort -u)
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            base="HEAD~1"
+          else
+            git fetch origin main
+            base="origin/main"
+          fi
+          mapfile -t changed_charts < <(git diff --name-only "$base" | grep -oE '^charts/([^/]+)' | sed 's/charts\///' | sort -u)
 
 
           echo "result=success" >> "$GITHUB_OUTPUT"
